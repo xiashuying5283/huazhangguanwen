@@ -5,7 +5,6 @@ import { TabView, TabBar } from 'react-native-tab-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSafeRouter, useSafeSearchParams } from '@/hooks/useSafeRouter';
 import { Screen } from '@/components/Screen';
-import { PoemCard } from '@/components/PoemCard';
 import { Api, type AuthorDetail } from '@/utils/api';
 import { theme } from '@/theme';
 
@@ -174,12 +173,18 @@ function RelTab({ author }: { author: AuthorDetail }) {
 }
 
 function PoemsTab({ author }: { author: AuthorDetail }) {
+  const router = useSafeRouter();
   if (!author.poems.length) {
     return <View style={styles.center}><Text style={styles.emptyTxt}>暂无诗作</Text></View>;
   }
   return (
     <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
-      {author.poems.map((p) => <PoemCard key={p.id} poem={p} />)}
+      {author.poems.map((p) => (
+        <Pressable key={p.id} style={styles.poemRow} onPress={() => router.push('/read', { id: p.id })}>
+          <View style={styles.poemDot} />
+          <Text style={styles.poemRowTitle} numberOfLines={1}>{p.title}</Text>
+        </Pressable>
+      ))}
     </ScrollView>
   );
 }
@@ -214,6 +219,9 @@ const styles = StyleSheet.create({
   workDesc: { fontSize: 13, color: theme.inkSoft, marginTop: 6, lineHeight: 19 },
   relCard: { flexDirection: 'row', gap: 12, backgroundColor: theme.surface, borderRadius: 20, padding: 14, marginBottom: 12, shadowColor: theme.shadowSoft, shadowOffset: { width: 0, height: 5 }, shadowRadius: 12, shadowOpacity: 1, elevation: 3 },
   relAvatar: { width: 44, height: 44, borderRadius: 14, backgroundColor: theme.bgSoft, alignItems: 'center', justifyContent: 'center' },
+  poemRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: theme.surface, borderRadius: 18, paddingVertical: 14, paddingHorizontal: 16, marginBottom: 10, shadowColor: theme.shadowSoft, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10, shadowOpacity: 1, elevation: 3 },
+  poemDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: theme.primary },
+  poemRowTitle: { fontSize: 15, fontWeight: '700', color: theme.ink, flex: 1 },
   relTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   relName: { fontSize: 15, fontWeight: '800', color: theme.ink },
   relTag: { backgroundColor: theme.bgSoft, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },

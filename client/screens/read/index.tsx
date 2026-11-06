@@ -7,7 +7,7 @@ import { Api, type PoemDetail, type PinyinChar } from '@/utils/api';
 import { getDeviceId } from '@/utils/device';
 import { SHADOW_SOFT, theme } from '@/theme';
 
-type TabKey = 'original' | 'annotation' | 'translate' | 'appreciate';
+type TabKey = 'annotation' | 'translate' | 'appreciate';
 
 export default function ReadScreen() {
   const insets = useSafeAreaInsets();
@@ -16,7 +16,7 @@ export default function ReadScreen() {
   const [poem, setPoem] = useState<PoemDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [tab, setTab] = useState<TabKey>('original');
+  const [tab, setTab] = useState<TabKey>('annotation');
   const [traditional, setTraditional] = useState(false);
   const [showPinyin, setShowPinyin] = useState(true);
 
@@ -49,7 +49,6 @@ export default function ReadScreen() {
   }, [id]);
 
   const tabs: { key: TabKey; title: string }[] = [
-    { key: 'original', title: '原文' },
     { key: 'annotation', title: '注解' },
     { key: 'translate', title: '翻译' },
     { key: 'appreciate', title: '赏析' },
@@ -109,7 +108,6 @@ export default function ReadScreen() {
               </View>
 
               <View style={styles.detailCard}>
-                {tab === 'original' && <Section label="全文" text={loadPlain(poem, traditional)} />}
                 {tab === 'annotation' && <Section label="注解" text={poem.annotation ?? '暂无注解'} />}
                 {tab === 'translate' && <Section label="现代翻译" text={poem.translation ?? '暂无译文'} />}
                 {tab === 'appreciate' && <Section label="赏析" text={poem.appreciation ?? '暂无赏析'} />}
@@ -120,11 +118,6 @@ export default function ReadScreen() {
       </View>
     </Screen>
   );
-}
-
-function loadPlain(poem: PoemDetail, traditional: boolean): string {
-  const content = traditional ? (poem.content_traditional ?? poem.content) : poem.content;
-  return content;
 }
 
 function PoemBody({ content, pinyin }: { content: string; pinyin?: PinyinChar[][] | null }) {
