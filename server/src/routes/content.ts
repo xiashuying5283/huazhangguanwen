@@ -13,28 +13,37 @@ interface PoemSummary {
   work_name?: string; work_id?: string;
 }
 
+interface PoemPage {
+  list: PoemSummary[]; page: number; pageSize: number; total: number; totalPages: number;
+}
+
 async function listPoems(query: {
   author_id?: string; work_id?: string; q?: string; limit?: number; offset?: number;
-}): Promise<PoemSummary[]> {
+}): Promise<PoemPage> {
   let qb = client
     .from('poems')
     .select('id, title, dynasty, genre, content, cover_emoji, background_hint, author_id, work_id, authors(name, avatar_emoji), works(name)');
+  let cnt = client.from('poems').select('*', { count: 'exact', head: true });
 
-  if (query.author_id) qb = qb.eq('author_id', query.author_id);
-  if (query.work_id) qb = qb.eq('work_id', query.work_id);
-  if (query.q) qb = qb.ilike('title', `%${query.q}%`);
+  if (query.author_id) { qb = qb.eq('author_id', query.author_id); cnt = cnt.eq('author_id', query.author_id); }
+  if (query.work_id) { qb = qb.eq('work_id', query.work_id); cnt = cnt.eq('work_id', query.work_id); }
+  if (query.q) { qb = qb.ilike('title', `%${query.q}%`); cnt = cnt.ilike('title', `%${query.q}%`); }
 
   const limit = Math.min(Math.max(query.limit || 50, 1), 60);
   const offset = Math.max(query.offset || 0, 0);
+  const page = Math.floor(offset / limit) + 1;
+  const { count: total, error: ce } = await cnt;
+  if (ce) throw new Error(`统计诗文失败: ${ce.message}`);
   const { data, error } = await qb.order('created_at', { ascending: true }).order('id', { ascending: true }).range(offset, offset + limit - 1);
   if (error) throw new Error(`查询诗文失败: ${error.message}`);
-  return (data as any[]).map((r) => ({
+  const list = (data as any[]).map((r) => ({
     id: r.id, title: r.title, dynasty: r.dynasty, genre: r.genre,
     content: r.content, cover_emoji: r.cover_emoji, background_hint: r.background_hint,
     author_id: r.author_id,
     author_name: r.authors?.name, author_emoji: r.authors?.avatar_emoji,
     work_id: r.work_id, work_name: r.works?.name,
   }));
+  return { list, page, pageSize: limit, total: total ?? 0, totalPages: Math.ceil((total ?? 0) / limit) };
 }
 
 // ============ 人物 / 作品 ============
@@ -45,16 +54,20 @@ router.get('/authors', async (req, res) => {
     const q = (req.query.q as string || '').trim();
     const limit = Math.min(Math.max(Number(req.query.limit) || 60, 1), 60);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
+    const page = Math.floor(offset / limit) + 1;
 
     let qb = client
       .from('authors')
       .select('id, name, name_traditional, dynasty, avatar_emoji, bio');
-    if (q) qb = qb.ilike('name', `%${q}%`);
+    let cnt = client.from('authors').select('*', { count: 'exact', head: true });
+    if (q) { qb = qb.ilike('name', `%${q}%`); cnt = cnt.ilike('name', `%${q}%`); }
 
+    const { count: total, error: ce } = await cnt;
     const { data, error } = await qb
       .order('dynasty', { ascending: true })
       .order('name', { ascending: true })
       .range(offset, offset + limit - 1);
+    if (ce) throw new Error(ce.message);
     if (error) throw new Error(error.message);
 
     const withCounts = await Promise.all((data || []).map(async (a: any) => {
@@ -62,7 +75,7 @@ router.get('/authors', async (req, res) => {
         .from('poems').select('*', { count: 'exact', head: true }).eq('author_id', a.id);
       return { ...a, poem_count: count ?? 0 };
     }));
-    res.json(withCounts);
+    res.json({ list: withCounts, page, pageSize: limit, total: total ?? 0, totalPages: Math.ceil((total ?? 0) / limit) });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

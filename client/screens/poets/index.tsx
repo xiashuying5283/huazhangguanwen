@@ -1,42 +1,45 @@
-import { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Screen } from '@/components/Screen';
 import { AppHeader } from '@/components/AppHeader';
 import { AuthorCard } from '@/components/AuthorCard';
 import { SearchModal } from '@/components/SearchModal';
-import { Api, type AuthorSummary } from '@/utils/api';
+import { PaginationBar } from '@/components/PaginationBar';
+import { Api, type AuthorSummary, type Paged } from '@/utils/api';
 import { theme } from '@/theme';
 
 const PAGE = 60;
 
 export default function PoetsScreen() {
   const [authors, setAuthors] = useState<AuthorSummary[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
-  const indexRef = useRef(0);
 
-  const load = useCallback(async (reset: boolean) => {
-    if (reset) setLoading(true); else setLoadingMore(true);
+  const loadPage = useCallback(async (p: number) => {
+    setLoading(true);
     setError('');
     try {
       // 服务端文件：server/src/routes/content.ts
-      // 接口：GET /api/v1/authors ；Query 参数：limit?: number, offset?: number
-      const offset = reset ? 0 : indexRef.current;
-      const data = await Api.get<AuthorSummary[]>(`/api/v1/authors?limit=${PAGE}&offset=${offset}`);
-      setAuthors((prev) => reset ? data : [...prev, ...data]);
-      indexRef.current = offset + data.length;
-      setHasMore(data.length >= PAGE);
-    } catch (e) { setError((e as Error).message); }
+      // 接口：GET /api/v1/authors ；Query：limit?: number, offset?: number
+      const offset = (p - 1) * PAGE;
+      const data = await Api.get<Paged<AuthorSummary>>(`/api/v1/authors?limit=${PAGE}&offset=${offset}`);
+      setAuthors(data.list);
+      setPage(data.page);
+      setTotalPages(data.totalPages);
+      setTotal(data.total);
+    } catch (e) {
+      setError((e as Error).message);
+    }
     setLoading(false);
-    setLoadingMore(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useFocusEffect(useCallback(() => { load(true); }, [load]));
+  useFocusEffect(useCallback(() => { loadPage(1); }, [loadPage]));
 
   return (
     <Screen backgroundColor={theme.bgRoot} safeAreaEdges={['left', 'right', 'bottom']} style={{ flex: 1 }}>
@@ -50,17 +53,17 @@ export default function PoetsScreen() {
         ) : (
           <>
             {authors.map((a) => <AuthorCard key={a.id} author={a} />)}
-            {hasMore && (
-              <Pressable style={styles.moreBtn} onPress={() => load(false)} disabled={loadingMore}>
-                {loadingMore
-                  ? <ActivityIndicator color={theme.primaryDeep} />
-                  : <Text style={styles.moreTxt}>加载更多诗人</Text>}
-              </Pressable>
-            )}
+            <PaginationBar
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              onPrev={() => loadPage(page - 1)}
+              onNext={() => loadPage(page + 1)}
+            />
           </>
         )}
       </ScrollView>
-      <SearchModal visible={searchOpen} onClose={() => setSearchOpen(false)} afterSearch={() => { setSearchOpen(false); load(true); }} />
+      <SearchModal visible={searchOpen} onClose={() => setSearchOpen(false)} afterSearch={() => { setSearchOpen(false); loadPage(1); }} />
     </Screen>
   );
 }
@@ -69,6 +72,4 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 20, paddingBottom: 40 },
   center: { alignItems: 'center', paddingTop: 80 },
   error: { color: theme.primaryDeep, fontWeight: '600' },
-  moreBtn: { alignItems: 'center', paddingVertical: 16, marginTop: 6 },
-  moreTxt: { color: theme.primaryDeep, fontWeight: '800' },
 });

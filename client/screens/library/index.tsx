@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSafeSearchParams } from '@/hooks/useSafeRouter';
@@ -6,8 +6,11 @@ import { Screen } from '@/components/Screen';
 import { AppHeader } from '@/components/AppHeader';
 import { PoemCard } from '@/components/PoemCard';
 import { SearchModal } from '@/components/SearchModal';
-import { Api, type AuthorSummary, type PoemSummary, type WorkSummary } from '@/utils/api';
+import { PaginationBar } from '@/components/PaginationBar';
+import { Api, type AuthorSummary, type Paged, type PoemSummary, type WorkSummary } from '@/utils/api';
 import { theme } from '@/theme';
+
+const PAGE = 50;
 
 export default function LibraryScreen() {
   const { work: initWork } = useSafeSearchParams<{ work?: string }>();
@@ -16,47 +19,49 @@ export default function LibraryScreen() {
   const [poems, setPoems] = useState<PoemSummary[]>([]);
   const [authorId, setAuthorId] = useState<string | null>(null);
   const [workId, setWorkId] = useState<string | null>(initWork ?? null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
-  const poemsRef = useRef(0);
 
   const loadMeta = useCallback(async () => {
     try {
       const [a, w] = await Promise.all([
         // 服务端文件：server/src/routes/content.ts
         // 接口：GET /api/v1/authors
-        Api.get<AuthorSummary[]>('/api/v1/authors?limit=60'),
+        Api.get<Paged<AuthorSummary>>('/api/v1/authors?limit=60'),
         // 服务端文件：server/src/routes/content.ts
         // 接口：GET /api/v1/works
         Api.get<WorkSummary[]>('/api/v1/works'),
       ]);
-      setAuthors(a); setWorks(w);
+      setAuthors(a.list); setWorks(w);
     } catch { /* chips 加载失败不阻塞 */ }
   }, []);
 
-  const loadPoems = useCallback(async (reset: boolean) => {
-    if (reset) setLoading(true); else setLoadingMore(true);
+  const loadPoems = useCallback(async (p: number) => {
+    setLoading(true);
     try {
       // 服务端文件：server/src/routes/content.ts
       // 接口：GET /api/v1/poems ；Query 参数：author_id?: string, work_id?: string, limit?: number, offset?: number
       const params: string[] = [];
       if (authorId) params.push(`author_id=${authorId}`);
       if (workId) params.push(`work_id=${workId}`);
-      const offset = reset ? 0 : poemsRef.current;
-      params.push(`limit=50`, `offset=${offset}`);
-      const data = await Api.get<PoemSummary[]>(`/api/v1/poems?${params.join('&')}`);
-      setPoems((prev) => reset ? data : [...prev, ...data]);
-      poemsRef.current = offset + data.length;
-      setHasMore(data.length >= 50);
-    } catch { if (reset) setPoems([]); }
+      params.push(`limit=${PAGE}`, `offset=${(p - 1) * PAGE}`);
+      const data = await Api.get<Paged<PoemSummary>>(`/api/v1/poems?${params.join('&')}`);
+      setPoems(data.list);
+      setPage(data.page);
+      setTotalPages(data.totalPages);
+      setTotal(data.total);
+    } catch { setPoems([]); setTotal(0); setTotalPages(1); }
     setLoading(false);
-    setLoadingMore(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authorId, workId]);
 
-  useFocusEffect(useCallback(() => { loadMeta(); loadPoems(true); }, [loadMeta, loadPoems]));
+  // 筛选变化时回到第一页
+  useEffect(() => { loadPoems(1); }, [authorId, workId, loadPoems]);
+
+  useFocusEffect(useCallback(() => { loadMeta(); loadPoems(1); }, [loadMeta, loadPoems]));
 
   return (
     <Screen backgroundColor={theme.bgRoot} safeAreaEdges={['left', 'right', 'bottom']} style={{ flex: 1 }}>
@@ -66,7 +71,7 @@ export default function LibraryScreen() {
         <Text style={styles.filterLabel}>按人物</Text>
         <View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
-            <Chip text="全部" active={!authorId} onPress={() => setAuthorId(null)} />
+            <Chip text="全部" active={!authorId} onPress={() => { setAuthorId(null); setWorkId(null); }} />
             {authors.map((a) => (
               <Chip key={a.id} text={a.name} active={authorId === a.id} onPress={() => { setAuthorId(a.id); setWorkId(null); }} />
             ))}
@@ -77,7 +82,7 @@ export default function LibraryScreen() {
         <Text style={[styles.filterLabel, { marginTop: 18 }]}>按作品集</Text>
         <View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
-            <Chip text="全部" active={!workId} onPress={() => setWorkId(null)} />
+            <Chip text="全部" active={!workId} onPress={() => { setWorkId(null); setAuthorId(null); }} />
             {works.map((w) => (
               <Chip key={w.id} text={`《${w.name}》`} active={workId === w.id} onPress={() => { setWorkId(w.id); setAuthorId(null); }} />
             ))}
@@ -85,7 +90,7 @@ export default function LibraryScreen() {
         </View>
 
         <View style={styles.listHeader}>
-          <Text style={styles.resultLabel}>共 {poems.length} 篇</Text>
+          <Text style={styles.resultLabel}>共 {total.toLocaleString()} 篇</Text>
           {(authorId || workId) ? (
             <Pressable onPress={() => { setAuthorId(null); setWorkId(null); }} hitSlop={8}>
               <Text style={styles.clearTxt}>清除筛选</Text>
@@ -98,20 +103,20 @@ export default function LibraryScreen() {
         ) : poems.length ? (
           <>
             {poems.map((p) => <PoemCard key={p.id} poem={p} />)}
-            {hasMore && (
-              <Pressable style={styles.moreBtn} onPress={() => loadPoems(false)} disabled={loadingMore}>
-                {loadingMore
-                  ? <ActivityIndicator color={theme.primaryDeep} />
-                  : <Text style={styles.moreTxt}>加载更多</Text>}
-              </Pressable>
-            )}
+            <PaginationBar
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              onPrev={() => loadPoems(page - 1)}
+              onNext={() => loadPoems(page + 1)}
+            />
           </>
         ) : (
           <View style={styles.center}><Text style={styles.emptyTxt}>没有找到符合条件的诗文</Text></View>
         )}
       </ScrollView>
 
-      <SearchModal visible={searchOpen} onClose={() => setSearchOpen(false)} afterSearch={() => loadPoems(true)} />
+      <SearchModal visible={searchOpen} onClose={() => setSearchOpen(false)} afterSearch={() => loadPoems(1)} />
     </Screen>
   );
 }
@@ -138,6 +143,4 @@ const styles = StyleSheet.create({
   clearTxt: { fontSize: 13, color: theme.primaryDeep, fontWeight: '700' },
   center: { alignItems: 'center', paddingTop: 60, paddingBottom: 40 },
   emptyTxt: { color: theme.muted, fontWeight: '600' },
-  moreBtn: { alignItems: 'center', paddingVertical: 16, marginTop: 6 },
-  moreTxt: { color: theme.primaryDeep, fontWeight: '800' },
 });

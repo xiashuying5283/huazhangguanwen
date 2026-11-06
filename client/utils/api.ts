@@ -39,6 +39,8 @@ export interface WorkSummary {
   cover_emoji?: string | null; author_name?: string | null; poem_count?: number;
 }
 
+export interface Paged<T> { list: T[]; page: number; pageSize: number; total: number; totalPages: number; }
+
 export interface PoemSummary {
   id: string; title: string; dynasty: string; genre: string; content: string;
   cover_emoji?: string | null; background_hint?: string | null;
