@@ -1,0 +1,70 @@
+/**
+ * 后端 API 基础地址
+ * - 运行时由平台注入 EXPO_PUBLIC_BACKEND_BASE_URL
+ */
+export const API_BASE = (process.env.EXPO_PUBLIC_BACKEND_BASE_URL ?? '').replace(/\/$/, '');
+
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  });
+  if (!res.ok) {
+    let msg = `请求失败(${res.status})`;
+    try {
+      const body = await res.json();
+      msg = body?.error || msg;
+    } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+  return res.json() as Promise<T>;
+}
+
+export const Api = {
+  get<T>(path: string): Promise<T> {
+    return request<T>(path);
+  },
+  post<T>(path: string, body?: unknown): Promise<T> {
+    return request<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}) });
+  },
+};
+
+export interface AuthorSummary {
+  id: string; name: string; name_traditional?: string | null; dynasty: string;
+  avatar_emoji?: string | null; bio?: string | null; poem_count?: number;
+}
+
+export interface WorkSummary {
+  id: string; name: string; era?: string | null; description?: string | null;
+  cover_emoji?: string | null; author_name?: string | null; poem_count?: number;
+}
+
+export interface PoemSummary {
+  id: string; title: string; dynasty: string; genre: string; content: string;
+  cover_emoji?: string | null; background_hint?: string | null;
+  author_id?: string | null; author_name?: string | null; author_emoji?: string | null;
+  work_id?: string | null; work_name?: string | null;
+}
+
+export interface PinyinChar { c: string; p: string }
+
+export interface PoemDetail extends PoemSummary {
+  content_traditional?: string | null;
+  pinyin?: PinyinChar[][];
+  annotation?: string | null;
+  translation?: string | null;
+  appreciation?: string | null;
+  read_count?: number;
+}
+
+export interface Relationship {
+  id: string; relation: string; note?: string | null;
+  related_author_id?: string | null;
+  related_author?: { name?: string; avatar_emoji?: string | null; dynasty?: string | null } | null;
+}
+
+export interface AuthorDetail extends AuthorSummary {
+  works: WorkSummary[];
+  poems: PoemSummary[];
+  relationships: Relationship[];
+}
