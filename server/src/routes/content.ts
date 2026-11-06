@@ -92,8 +92,20 @@ router.get('/authors/:id', async (req, res) => {
       .eq('author_id', id).order('created_at', { ascending: true }).limit(500);
     if (pe) throw new Error(pe.message);
 
+    // 语料作者无人工简介时，按朝代与存诗量生成一段兜底生平
+    let poemCount = (poems || []).length;
+    if (!author.bio || !String(author.bio).trim()) {
+      const { count, error: ce } = await client
+        .from('poems').select('*', { count: 'exact', head: true }).eq('author_id', id);
+      if (!ce && count != null && count > poemCount) poemCount = count;
+      const d = String(author.dynasty || '');
+      const src = d.includes('宋') || d.includes('词') ? '《全宋词》' : d.includes('唐') ? '《全唐诗》' : '古籍';
+      author.bio = `${d}诗人。据${src}等古籍辑录，存世篇目约 ${poemCount} 篇。本页生平尚待精编，作品如下。`;
+    }
+
     res.json({
       ...author,
+      poemCount,
       works: works || [],
       poems: (poems || []).map((p: any) => ({ ...p, work_name: p.works?.name })),
       relationships: (rels || []).map((r: any) => ({
