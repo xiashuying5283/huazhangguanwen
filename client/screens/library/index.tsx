@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSafeSearchParams } from '@/hooks/useSafeRouter';
 import { Screen } from '@/components/Screen';
@@ -24,6 +24,10 @@ export default function LibraryScreen() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [filterKind, setFilterKind] = useState<'author' | 'work' | null>(null);
+
+  const selectedAuthor = authors.find((a) => a.id === authorId)?.name;
+  const selectedWork = works.find((w) => w.id === workId)?.name;
 
   const loadMeta = useCallback(async () => {
     try {
@@ -69,25 +73,17 @@ export default function LibraryScreen() {
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* 人物筛选 */}
         <Text style={styles.filterLabel}>按人物</Text>
-        <View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
-            <Chip text="全部" active={!authorId} onPress={() => { setAuthorId(null); setWorkId(null); }} />
-            {authors.map((a) => (
-              <Chip key={a.id} text={a.name} active={authorId === a.id} onPress={() => { setAuthorId(a.id); setWorkId(null); }} />
-            ))}
-          </ScrollView>
-        </View>
+        <Pressable style={({ pressed }) => [styles.filterBtn, pressed && styles.filterBtnPressed]} onPress={() => setFilterKind('author')}>
+          <Text style={styles.filterBtnTxt} numberOfLines={1}>{selectedAuthor ?? '全部人物'}</Text>
+          <Text style={styles.filterBtnCaret}>▾</Text>
+        </Pressable>
 
         {/* 作品集筛选 */}
         <Text style={[styles.filterLabel, { marginTop: 18 }]}>按作品集</Text>
-        <View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
-            <Chip text="全部" active={!workId} onPress={() => { setWorkId(null); setAuthorId(null); }} />
-            {works.map((w) => (
-              <Chip key={w.id} text={`《${w.name}》`} active={workId === w.id} onPress={() => { setWorkId(w.id); setAuthorId(null); }} />
-            ))}
-          </ScrollView>
-        </View>
+        <Pressable style={({ pressed }) => [styles.filterBtn, pressed && styles.filterBtnPressed]} onPress={() => setFilterKind('work')}>
+          <Text style={styles.filterBtnTxt} numberOfLines={1}>{selectedWork ? `《${selectedWork}》` : '全部作品集'}</Text>
+          <Text style={styles.filterBtnCaret}>▾</Text>
+        </Pressable>
 
         <View style={styles.listHeader}>
           <Text style={styles.resultLabel}>共 {total.toLocaleString()} 篇</Text>
@@ -117,27 +113,74 @@ export default function LibraryScreen() {
       </ScrollView>
 
       <SearchModal visible={searchOpen} onClose={() => setSearchOpen(false)} afterSearch={() => loadPoems(1)} />
+
+      {filterKind === 'author' ? (
+        <FilterSheet
+          title="按人物筛选"
+          options={[{ key: '', label: '全部人物' }, ...authors.map((a) => ({ key: a.id, label: a.name }))]}
+          current={authorId ?? ''}
+          onSelect={(key) => { setAuthorId(key || null); setWorkId(null); setFilterKind(null); }}
+          onClose={() => setFilterKind(null)}
+        />
+      ) : null}
+      {filterKind === 'work' ? (
+        <FilterSheet
+          title="按作品集筛选"
+          options={[{ key: '', label: '全部作品集' }, ...works.map((w) => ({ key: w.id, label: `《${w.name}》` }))]}
+          current={workId ?? ''}
+          onSelect={(key) => { setWorkId(key || null); setAuthorId(null); setFilterKind(null); }}
+          onClose={() => setFilterKind(null)}
+        />
+      ) : null}
     </Screen>
   );
 }
 
-function Chip({ text, active, onPress }: { text: string; active: boolean; onPress: () => void }) {
+function FilterSheet({ title, options, current, onSelect, onClose }: {
+  title: string;
+  options: { key: string; label: string }[];
+  current: string;
+  onSelect: (key: string) => void;
+  onClose: () => void;
+}) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.chip, active && styles.chipActive, pressed && styles.chipPressed]}>
-      <Text style={[styles.chipTxt, active && styles.chipTxtActive]}>{text}</Text>
-    </Pressable>
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.sheetMask} onPress={onClose}>
+        <Pressable style={styles.sheet} onPress={() => { /* 阻止点击穿透到遮罩 */ }}>
+          <Text style={styles.sheetTitle}>{title}</Text>
+          <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+            {options.map((o) => {
+              const active = o.key === current;
+              return (
+                <Pressable key={o.key} style={({ pressed }) => [styles.sheetItem, pressed && styles.sheetItemPressed]}
+                  onPress={() => onSelect(o.key)}>
+                  <Text style={[styles.sheetItemTxt, active && styles.sheetItemTxtActive]} numberOfLines={1}>{o.label}</Text>
+                  {active ? <Text style={styles.sheetItemCheck}>✓</Text> : null}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 20, paddingBottom: 40 },
   filterLabel: { fontSize: 15, fontWeight: '800', color: theme.ink, marginBottom: 10 },
-  chipsRow: { gap: 8, paddingRight: 8 },
-  chip: { backgroundColor: theme.surface, borderRadius: 999, paddingHorizontal: 15, paddingVertical: 8, borderWidth: 1, borderColor: theme.line },
-  chipActive: { backgroundColor: theme.primary, borderColor: theme.primary },
-  chipPressed: { opacity: 0.85 },
-  chipTxt: { fontSize: 13, color: theme.inkSoft, fontWeight: '700' },
-  chipTxtActive: { color: '#fff' },
+  filterBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.surface, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, borderWidth: 1, borderColor: theme.line },
+  filterBtnPressed: { opacity: 0.85 },
+  filterBtnTxt: { fontSize: 14, color: theme.ink, fontWeight: '700', flex: 1, marginRight: 8 },
+  filterBtnCaret: { fontSize: 14, color: theme.muted, fontWeight: '700' },
+  sheetMask: { flex: 1, backgroundColor: 'rgba(15,10,15,0.4)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: theme.bgRoot, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 18, paddingBottom: 30, paddingHorizontal: 20, maxHeight: '70%' },
+  sheetTitle: { fontSize: 16, fontWeight: '800', color: theme.ink, marginBottom: 6, textAlign: 'center' },
+  sheetItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.line },
+  sheetItemPressed: { opacity: 0.7 },
+  sheetItemTxt: { fontSize: 15, color: theme.ink, fontWeight: '700' },
+  sheetItemTxtActive: { color: theme.primaryDeep },
+  sheetItemCheck: { fontSize: 16, color: theme.primaryDeep, fontWeight: '800' },
   listHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 22, marginBottom: 14 },
   resultLabel: { fontSize: 14, color: theme.muted, fontWeight: '700' },
   clearTxt: { fontSize: 13, color: theme.primaryDeep, fontWeight: '700' },
