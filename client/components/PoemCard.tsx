@@ -6,7 +6,7 @@ import type { PoemSummary } from '@/utils/api';
 import { pickCardBg, theme } from '@/theme';
 
 function excerpt(content: string): string {
-  return content.split('\n').slice(0, 2).join('\n');
+  return (content || '').split('\n').slice(0, 2).join('\n');
 }
 
 export const PoemCard = memo(function PoemCard({ poem }: { poem: PoemSummary }) {

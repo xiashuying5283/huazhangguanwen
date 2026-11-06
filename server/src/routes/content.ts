@@ -14,7 +14,7 @@ interface PoemSummary {
 }
 
 async function listPoems(query: {
-  author_id?: string; work_id?: string; q?: string;
+  author_id?: string; work_id?: string; q?: string; limit?: number; offset?: number;
 }): Promise<PoemSummary[]> {
   let qb = client
     .from('poems')
@@ -24,7 +24,9 @@ async function listPoems(query: {
   if (query.work_id) qb = qb.eq('work_id', query.work_id);
   if (query.q) qb = qb.ilike('title', `%${query.q}%`);
 
-  const { data, error } = await qb.order('created_at', { ascending: true }).limit(60);
+  const limit = Math.min(Math.max(query.limit || 50, 1), 60);
+  const offset = Math.max(query.offset || 0, 0);
+  const { data, error } = await qb.order('created_at', { ascending: true }).range(offset, offset + limit - 1);
   if (error) throw new Error(`查询诗文失败: ${error.message}`);
   return (data as any[]).map((r) => ({
     id: r.id, title: r.title, dynasty: r.dynasty, genre: r.genre,
@@ -37,14 +39,22 @@ async function listPoems(query: {
 
 // ============ 人物 / 作品 ============
 
-// 人物列表
-router.get('/authors', async (_req, res) => {
+// 人物列表（分页；可选搜索）
+router.get('/authors', async (req, res) => {
   try {
-    const { data, error } = await client
+    const q = (req.query.q as string || '').trim();
+    const limit = Math.min(Math.max(Number(req.query.limit) || 60, 1), 60);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+
+    let qb = client
       .from('authors')
-      .select('id, name, name_traditional, dynasty, avatar_emoji, bio')
+      .select('id, name, name_traditional, dynasty, avatar_emoji, bio');
+    if (q) qb = qb.ilike('name', `%${q}%`);
+
+    const { data, error } = await qb
       .order('dynasty', { ascending: true })
-      .order('name', { ascending: true });
+      .order('name', { ascending: true })
+      .range(offset, offset + limit - 1);
     if (error) throw new Error(error.message);
 
     const withCounts = await Promise.all((data || []).map(async (a: any) => {
@@ -78,8 +88,8 @@ router.get('/authors/:id', async (req, res) => {
     if (re) throw new Error(re.message);
 
     const { data: poems, error: pe } = await client
-      .from('poems').select('id, title, dynasty, genre, cover_emoji, background_hint, work_id, works(name)')
-      .eq('author_id', id).order('created_at', { ascending: true });
+      .from('poems').select('id, title, dynasty, genre, content, cover_emoji, background_hint, work_id, works(name)')
+      .eq('author_id', id).order('created_at', { ascending: true }).limit(500);
     if (pe) throw new Error(pe.message);
 
     res.json({
@@ -124,6 +134,8 @@ router.get('/poems', async (req, res) => {
       author_id: req.query.author_id as string | undefined,
       work_id: req.query.work_id as string | undefined,
       q: req.query.q as string | undefined,
+      limit: req.query.limit ? Number(req.query.limit) : undefined,
+      offset: req.query.offset ? Number(req.query.offset) : undefined,
     });
     res.json(poems);
   } catch (e: any) {
@@ -253,7 +265,7 @@ router.get('/recommend/daily', async (req, res) => {
       const { data: p } = await client
         .from('poems')
         .select('id, title, dynasty, genre, content, cover_emoji, background_hint, author_id, works(name)')
-        .eq('author_id', topAuthorId);
+        .eq('author_id', topAuthorId).limit(2000);
       if (p && p.length > 0) {
         poemRows = p;
       }
@@ -264,7 +276,7 @@ router.get('/recommend/daily', async (req, res) => {
       const { data: all } = await client
         .from('poems')
         .select('id, title, dynasty, genre, content, cover_emoji, background_hint, author_id, works(name)')
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true }).limit(3000);
       poemRows = all || [];
       if (poemRows.length === 0) return res.status(404).json({ error: '暂无诗文' });
       reason = reason || '今日为你分享一首经典古诗 🌟';

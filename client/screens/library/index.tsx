@@ -17,6 +17,8 @@ export default function LibraryScreen() {
   const [authorId, setAuthorId] = useState<string | null>(null);
   const [workId, setWorkId] = useState<string | null>(initWork ?? null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
 
   const loadMeta = useCallback(async () => {
@@ -24,7 +26,7 @@ export default function LibraryScreen() {
       const [a, w] = await Promise.all([
         // 服务端文件：server/src/routes/content.ts
         // 接口：GET /api/v1/authors
-        Api.get<AuthorSummary[]>('/api/v1/authors'),
+        Api.get<AuthorSummary[]>('/api/v1/authors?limit=60'),
         // 服务端文件：server/src/routes/content.ts
         // 接口：GET /api/v1/works
         Api.get<WorkSummary[]>('/api/v1/works'),
@@ -33,21 +35,26 @@ export default function LibraryScreen() {
     } catch { /* chips 加载失败不阻塞 */ }
   }, []);
 
-  const loadPoems = useCallback(async () => {
-    setLoading(true);
+  const loadPoems = useCallback(async (reset: boolean) => {
+    if (reset) setLoading(true); else setLoadingMore(true);
     try {
       // 服务端文件：server/src/routes/content.ts
-      // 接口：GET /api/v1/poems ；Query 参数：author_id?: string, work_id?: string
+      // 接口：GET /api/v1/poems ；Query 参数：author_id?: string, work_id?: string, limit?: number, offset?: number
       const params: string[] = [];
       if (authorId) params.push(`author_id=${authorId}`);
       if (workId) params.push(`work_id=${workId}`);
-      const data = await Api.get<PoemSummary[]>(`/api/v1/poems${params.length ? `?${params.join('&')}` : ''}`);
-      setPoems(data);
-    } catch { setPoems([]); }
+      const offset = reset ? 0 : poems.length;
+      params.push(`limit=50`, `offset=${offset}`);
+      const data = await Api.get<PoemSummary[]>(`/api/v1/poems?${params.join('&')}`);
+      setPoems((prev) => reset ? data : [...prev, ...data]);
+      setHasMore(data.length >= 50);
+    } catch { if (reset) setPoems([]); }
     setLoading(false);
+    setLoadingMore(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authorId, workId]);
 
-  useFocusEffect(useCallback(() => { loadMeta(); loadPoems(); }, [loadMeta, loadPoems]));
+  useFocusEffect(useCallback(() => { loadMeta(); loadPoems(true); }, [loadMeta, loadPoems]));
 
   return (
     <Screen backgroundColor={theme.bgRoot} safeAreaEdges={['left', 'right', 'bottom']} style={{ flex: 1 }}>
@@ -87,13 +94,22 @@ export default function LibraryScreen() {
         {loading ? (
           <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
         ) : poems.length ? (
-          poems.map((p) => <PoemCard key={p.id} poem={p} />)
+          <>
+            {poems.map((p) => <PoemCard key={p.id} poem={p} />)}
+            {hasMore && (
+              <Pressable style={styles.moreBtn} onPress={() => loadPoems(false)} disabled={loadingMore}>
+                {loadingMore
+                  ? <ActivityIndicator color={theme.primaryDeep} />
+                  : <Text style={styles.moreTxt}>加载更多</Text>}
+              </Pressable>
+            )}
+          </>
         ) : (
           <View style={styles.center}><Text style={styles.emptyTxt}>没有找到符合条件的诗文</Text></View>
         )}
       </ScrollView>
 
-      <SearchModal visible={searchOpen} onClose={() => setSearchOpen(false)} afterSearch={loadPoems} />
+      <SearchModal visible={searchOpen} onClose={() => setSearchOpen(false)} afterSearch={() => loadPoems(true)} />
     </Screen>
   );
 }
@@ -120,4 +136,6 @@ const styles = StyleSheet.create({
   clearTxt: { fontSize: 13, color: theme.primaryDeep, fontWeight: '700' },
   center: { alignItems: 'center', paddingTop: 60, paddingBottom: 40 },
   emptyTxt: { color: theme.muted, fontWeight: '600' },
+  moreBtn: { alignItems: 'center', paddingVertical: 16, marginTop: 6 },
+  moreTxt: { color: theme.primaryDeep, fontWeight: '800' },
 });
