@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSafeSearchParams } from '@/hooks/useSafeRouter';
@@ -20,6 +20,7 @@ export default function LibraryScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
+  const poemsRef = useRef(0);
 
   const loadMeta = useCallback(async () => {
     try {
@@ -43,10 +44,11 @@ export default function LibraryScreen() {
       const params: string[] = [];
       if (authorId) params.push(`author_id=${authorId}`);
       if (workId) params.push(`work_id=${workId}`);
-      const offset = reset ? 0 : poems.length;
+      const offset = reset ? 0 : poemsRef.current;
       params.push(`limit=50`, `offset=${offset}`);
       const data = await Api.get<PoemSummary[]>(`/api/v1/poems?${params.join('&')}`);
       setPoems((prev) => reset ? data : [...prev, ...data]);
+      poemsRef.current = offset + data.length;
       setHasMore(data.length >= 50);
     } catch { if (reset) setPoems([]); }
     setLoading(false);

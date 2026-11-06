@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Screen } from '@/components/Screen';
@@ -17,6 +17,7 @@ export default function PoetsScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const indexRef = useRef(0);
 
   const load = useCallback(async (reset: boolean) => {
     if (reset) setLoading(true); else setLoadingMore(true);
@@ -24,9 +25,10 @@ export default function PoetsScreen() {
     try {
       // 服务端文件：server/src/routes/content.ts
       // 接口：GET /api/v1/authors ；Query 参数：limit?: number, offset?: number
-      const offset = reset ? 0 : authors.length;
+      const offset = reset ? 0 : indexRef.current;
       const data = await Api.get<AuthorSummary[]>(`/api/v1/authors?limit=${PAGE}&offset=${offset}`);
       setAuthors((prev) => reset ? data : [...prev, ...data]);
+      indexRef.current = offset + data.length;
       setHasMore(data.length >= PAGE);
     } catch (e) { setError((e as Error).message); }
     setLoading(false);

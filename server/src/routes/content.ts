@@ -26,7 +26,7 @@ async function listPoems(query: {
 
   const limit = Math.min(Math.max(query.limit || 50, 1), 60);
   const offset = Math.max(query.offset || 0, 0);
-  const { data, error } = await qb.order('created_at', { ascending: true }).range(offset, offset + limit - 1);
+  const { data, error } = await qb.order('created_at', { ascending: true }).order('id', { ascending: true }).range(offset, offset + limit - 1);
   if (error) throw new Error(`查询诗文失败: ${error.message}`);
   return (data as any[]).map((r) => ({
     id: r.id, title: r.title, dynasty: r.dynasty, genre: r.genre,
