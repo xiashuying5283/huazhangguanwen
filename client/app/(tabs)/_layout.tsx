@@ -41,7 +41,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: '今日荐诗',
+          title: '荐诗',
           tabBarIcon: ({ color }) => (
             <FontAwesome6 name="house" size={20} color={color} />
           ),
