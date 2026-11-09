@@ -56,9 +56,10 @@ router.get('/authors', async (req, res) => {
     const offset = Math.max(Number(req.query.offset) || 0, 0);
     const page = Math.floor(offset / limit) + 1;
 
+    // 用嵌入式聚合（authors→poems count）替代逐作者 count 查询，消除 N+1
     let qb = client
       .from('authors')
-      .select('id, name, name_traditional, dynasty, avatar_emoji, bio');
+      .select('id, name, name_traditional, dynasty, avatar_emoji, bio, poems(count)');
     let cnt = client.from('authors').select('*', { count: 'exact', head: true });
     if (q) { qb = qb.ilike('name', `%${q}%`); cnt = cnt.ilike('name', `%${q}%`); }
 
@@ -70,12 +71,12 @@ router.get('/authors', async (req, res) => {
     if (ce) throw new Error(ce.message);
     if (error) throw new Error(error.message);
 
-    const withCounts = await Promise.all((data || []).map(async (a: any) => {
-      const { count } = await client
-        .from('poems').select('*', { count: 'exact', head: true }).eq('author_id', a.id);
-      return { ...a, poem_count: count ?? 0 };
+    const list = (data || []).map((a: any) => ({
+      ...a,
+      poem_count: Array.isArray(a.poems) && a.poems[0] ? (a.poems[0].count ?? 0) : 0,
+      poems: undefined,
     }));
-    res.json({ list: withCounts, page, pageSize: limit, total: total ?? 0, totalPages: Math.ceil((total ?? 0) / limit) });
+    res.json({ list, page, pageSize: limit, total: total ?? 0, totalPages: Math.ceil((total ?? 0) / limit) });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
@@ -135,14 +136,16 @@ router.get('/authors/:id', async (req, res) => {
 // 作品集列表
 router.get('/works', async (_req, res) => {
   try {
+    // 用嵌入式聚合（works→collection_entries count）替代逐本 count 查询
     const { data, error } = await client
       .from('works')
-      .select('*, authors(name, dynasty)');
+      .select('*, authors(name, dynasty), collection_entries(count)');
     if (error) throw new Error(error.message);
-    const withCounts = await Promise.all((data || []).map(async (w: any) => {
-      const { count } = await client
-        .from('collection_entries').select('*', { count: 'exact', head: true }).eq('work_id', w.id);
-      return { ...w, author_name: w.authors?.name, poem_count: count ?? 0 };
+    const withCounts = (data || []).map((w: any) => ({
+      ...w, author_name: w.authors?.name,
+      collection_entries: undefined,
+      poem_count: Array.isArray(w.collection_entries) && w.collection_entries[0]
+        ? (w.collection_entries[0].count ?? 0) : 0,
     }));
     res.json(withCounts);
   } catch (e: any) {
@@ -158,7 +161,7 @@ router.get('/works/:id/entries', async (req, res) => {
     const offset = req.query.offset ? Number(req.query.offset) : 0;
     let qb = client
       .from('collection_entries')
-      .select('id, volume, sort_order, entry_title, poem_id, poems(id, title, dynasty, genre, cover_emoji, background_hint, author_id, authors(name))', { count: 'exact' })
+      .select('id, volume, sort_order, entry_title, poem_id, poems(id, title, dynasty, genre, cover_emoji, background_hint, author_id)', { count: 'exact' })
       .eq('work_id', id)
       .order('sort_order', { ascending: true });
     const { data, count, error } = await qb.range(offset, offset + limit - 1);
