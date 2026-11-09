@@ -21,7 +21,7 @@ const CIRCLES = [
 ];
 
 function excerpt(content: string): string {
-  return (content || '').split('\n').slice(0, 2).join('\n');
+  return (content || '').split('\n').slice(0, 2).join(' ');
 }
 
 export const PoemCard = memo(function PoemCard({ poem }: { poem: PoemSummary }) {
@@ -29,25 +29,17 @@ export const PoemCard = memo(function PoemCard({ poem }: { poem: PoemSummary }) 
   const bg = pickCardBg(poem.background_hint);
   const stamp = CIRCLES[Math.abs(Number(poem.id) || 0) % CIRCLES.length];
   return (
-    <Pressable
-      onPress={() => router.push('/read', { id: poem.id })}
-      style={({ pressed }) => [styles.card, { backgroundColor: bg }, pressed && styles.pressed]}
-    >
-      <View style={styles.topRow}>
-        <Image source={stamp} style={styles.stamp} />
-        <View style={styles.badges}>
-          {poem.genre ? <View style={styles.badge}><Text style={styles.badgeText}>{poem.genre}</Text></View> : null}
-          <View style={styles.badge}><Text style={styles.badgeText}>{poem.dynasty}</Text></View>
+    <Pressable onPress={() => router.push('/read', { id: poem.id })} style={({ pressed }) => [styles.card, { backgroundColor: bg }, pressed && styles.pressed]}>
+      <Image source={stamp} style={styles.thumb} />
+      <View style={styles.body}>
+        <View style={styles.topRow}>
+          <Text style={styles.title} numberOfLines={1}>{poem.title}</Text>
+          <FontAwesome6 name="angle-right" size={14} color="rgba(42,42,42,0.45)" />
         </View>
-      </View>
-      <Text style={styles.title} numberOfLines={1}>{poem.title}</Text>
-      <Text style={styles.byline}>
-        {poem.author_name ?? (poem.work_name ? poem.work_name : '佚名')}
-      </Text>
-      <Text style={styles.excerpt} numberOfLines={2}>{excerpt(poem.content)}</Text>
-      <View style={styles.readRow}>
-        <Text style={styles.readTxt}>开卷细读</Text>
-        <FontAwesome6 name="arrow-right" size={12} color={theme.primaryDeep} />
+        <Text style={styles.meta} numberOfLines={1}>
+          {poem.author_name ?? '佚名'}{poem.dynasty ? ` · ${poem.dynasty}` : ''}{poem.genre ? ` · ${poem.genre}` : ''}
+        </Text>
+        <Text style={styles.excerpt} numberOfLines={2}>{excerpt(poem.content)}</Text>
       </View>
     </Pressable>
   );
@@ -55,19 +47,19 @@ export const PoemCard = memo(function PoemCard({ poem }: { poem: PoemSummary }) 
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 22,
-    padding: 16,
-    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 20,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(228,219,198,0.55)',
   },
-  pressed: { opacity: 0.9, transform: [{ scale: 0.98 }] },
-  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  stamp: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(53,87,67,0.10)' },
-  badges: { flexDirection: 'row', gap: 6 },
-  badge: { backgroundColor: 'rgba(255,255,255,0.75)', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3 },
-  badgeText: { color: theme.inkSoft, fontSize: 11, fontWeight: '700' },
-  title: { marginTop: 12, fontSize: 18, fontWeight: '800', color: theme.ink },
-  byline: { marginTop: 3, fontSize: 12, color: theme.inkSoft, fontWeight: '600' },
-  excerpt: { marginTop: 10, fontSize: 14, lineHeight: 24, color: theme.ink, opacity: 0.85 },
-  readRow: { marginTop: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
-  readTxt: { fontSize: 12, fontWeight: '700', color: theme.primaryDeep },
+  pressed: { opacity: 0.9 },
+  thumb: { width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(53,87,67,0.10)' },
+  body: { flex: 1, marginLeft: 12 },
+  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  title: { fontSize: 16, fontWeight: '800', color: theme.ink, flex: 1 },
+  meta: { marginTop: 4, fontSize: 11, color: theme.muted, fontWeight: '700' },
+  excerpt: { marginTop: 7, fontSize: 12.5, lineHeight: 20, color: theme.inkSoft },
 });

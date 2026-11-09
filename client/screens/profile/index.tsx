@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
@@ -19,13 +19,13 @@ interface HistoryResp {
   page: number; pageSize: number; totalPages: number; list: HistoryItem[];
 }
 
-const genIcon = (genre?: string | null): string => {
+const genIcon = (genre?: string | null): keyof typeof FontAwesome6.glyphMap => {
   switch (genre) {
     case '词': return 'leaf';
     case '曲': return 'music';
     case '文': return 'scroll';
     case '骚体': return 'water';
-    case '诗': return 'flower';
+    case '诗': return 'feather';
     default: return 'book';
   }
 };
@@ -39,119 +39,146 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
+    setLoading(true);
     try {
       const deviceId = await getDeviceId();
-      // 服务端文件：server/src/routes/content.ts
-      // 接口：GET /api/v1/history ；Query 参数：device_id: string, limit?: number, offset?: number
       const data = await Api.get<HistoryResp>(`/api/v1/history?device_id=${encodeURIComponent(deviceId)}&limit=30`);
       setHistory(data.list);
       setReadTotal(data.total);
       setReadCount(data.read_count);
       setAuthorCount(data.author_count);
-    } catch { /* ignore */ }
+    } catch {
+      setHistory([]);
+    }
     setLoading(false);
   }, []);
 
-  // 返回本页时刷新（阅读后统计与历史会变化）
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const recent = useMemo(() => history.slice(0, 4), [history]);
 
   return (
     <Screen backgroundColor={theme.bgRoot} safeAreaEdges={['left', 'right', 'bottom']} style={{ flex: 1 }}>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* 顶部红梅装饰 */}
-        <Image source={require('@/assets/guanwen/decorations/pink_plum_branch.png')} style={styles.topPlum} />
+        <Image source={require('@/assets/guanwen/decorations/pink_plum_branch.png')} style={styles.topBranch} />
+        <View style={styles.header}>
+          <Text style={styles.title}>我的书斋</Text>
+          <Text style={styles.subtitle}>藏诗、阅卷、记人、修心</Text>
+        </View>
 
-        {/* 个人中心：居中圆头像 + 用户名 + 数据 */}
-        <View style={styles.userCard}>
-          <View style={styles.avatarBig}>
-            <Image source={require('@/assets/guanwen/circles/misty_mountains.png')} style={styles.avatarImg} />
+        <View style={styles.heroCard}>
+          <View style={styles.avatarRing}>
+            <Image source={require('@/assets/guanwen/circles/misty_mountains.png')} style={styles.avatar} />
           </View>
           <Text style={styles.nickname}>观文书客</Text>
-          <Text style={styles.motto}>读书破万卷，下笔如有神</Text>
+          <Text style={styles.bio}>把一日烟火，读成半卷清诗。</Text>
+
           <View style={styles.statsRow}>
-            <StatCard value={readTotal} label="读过篇数" />
-            <StatCard value={readCount} label="阅读次数" />
-            <StatCard value={authorCount} label="涉猎作家" />
+            <Stat value={readTotal} label="读过篇数" />
+            <Stat value={authorCount} label="涉猎作者" />
+            <Stat value={readCount} label="阅读次数" />
           </View>
         </View>
 
-        {/* 最近阅读 */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>最近阅读</Text>
-          {history.length > 0 ? <Text style={styles.sectionSub}>共 {readTotal} 篇</Text> : null}
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionTitle}>最近读过</Text>
+          {history.length > 0 ? <Text style={styles.sectionMeta}>共 {readTotal} 篇</Text> : null}
         </View>
 
         {loading ? (
           <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
-        ) : history.length ? (
-          <View style={styles.historyList}>
-            {history.map((h) => (
-              <Pressable key={h.id} style={({ pressed }) => [styles.historyRow, pressed && styles.historyRowPressed]}
-                onPress={() => router.push('/read', { id: h.poem_id })}>
-                <View style={styles.historyEmoji}><FontAwesome6 name={genIcon(h.genre) as any} size={16} color={theme.primaryDeep} /></View>
-                <View style={{ flex: 1, marginRight: 8 }}>
+        ) : recent.length ? (
+          <View style={styles.blockCard}>
+            {recent.map((h, idx) => (
+              <Pressable
+                key={h.id}
+                style={[styles.historyRow, idx === recent.length - 1 && styles.historyLastRow]}
+                onPress={() => router.push('/read', { id: h.poem_id })}
+              >
+                <Image source={require('@/assets/guanwen/circles/misty_mountains.png')} style={styles.historyCircle} />
+                <View style={{ flex: 1, marginHorizontal: 12 }}>
                   <Text style={styles.historyTitle} numberOfLines={1}>{h.title}</Text>
-                  <Text style={styles.historyMeta} numberOfLines={1}>
-                    [{h.author_name}]{h.work_name ? ` · 《${h.work_name}》` : ''}{h.dynasty ? ` · ${h.dynasty}` : ''}
-                  </Text>
+                  <Text style={styles.historyMeta} numberOfLines={1}>{h.author_name}{h.dynasty ? ` · ${h.dynasty}` : ''}</Text>
                 </View>
-                <Text style={styles.historyArrow}>›</Text>
+                <Pressable hitSlop={6}>
+                  <FontAwesome6 name="heart" size={16} color={idx < 2 ? theme.cinnabar : '#B7B2A5'} />
+                </Pressable>
               </Pressable>
             ))}
           </View>
         ) : (
           <View style={styles.emptyCard}>
-            <View style={styles.emptyIcon}><FontAwesome6 name="mug-hot" size={26} color={theme.muted} /></View>
-            <Text style={styles.emptyTxt}>还没有阅读记录，去发现一首心仪的诗吧</Text>
+            <FontAwesome6 name="mug-hot" size={24} color={theme.muted} />
+            <Text style={styles.emptyTxt}>还没有阅读记录，去首页读一首诗吧。</Text>
           </View>
         )}
 
-        {/* 关于 */}
-        <View style={styles.aboutCard}>
-          <Text style={styles.aboutLine}>「古诗文精读」· 亲测可用的萌系阅读小站</Text>
-          <Text style={styles.aboutLine2}>收录全唐诗、全宋词、全宋诗、元曲、楚辞、诗经、四书及蒙学等典籍</Text>
+        <View style={styles.settingsCard}>
+          {[
+            ['阅读设置', 'sliders'],
+            ['字体与排版', 'text-height'],
+            ['主题与背景', 'palette'],
+            ['数据与同步', 'database'],
+          ].map(([label, icon], idx) => (
+            <Pressable key={label} style={[styles.settingRow, idx === 3 && styles.settingLastRow]}>
+              <View style={styles.settingIconWrap}>
+                <FontAwesome6 name={icon as keyof typeof FontAwesome6.glyphMap} size={14} color={theme.primaryDeep} />
+              </View>
+              <Text style={styles.settingLabel}>{label}</Text>
+              <Text style={styles.settingArrow}>›</Text>
+            </Pressable>
+          ))}
         </View>
       </ScrollView>
     </Screen>
   );
 }
 
-function StatCard({ value, label }: { value: number; label: string }) {
+function Stat({ value, label }: { value: number; label: string }) {
   return (
-    <View style={styles.statCard}>
-      <Text style={styles.statValue}>{value.toLocaleString()}</Text>
+    <View style={styles.statCol}>
+      <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 20, paddingBottom: 40 },
-  topPlum: { position: 'absolute', top: -6, right: 0, width: 118, height: 96, opacity: 0.9 },
-  userCard: { alignItems: 'center', paddingTop: 6 },
-  avatarBig: { width: 84, height: 84, borderRadius: 42, overflow: 'hidden', borderWidth: 2, borderColor: 'rgba(90,107,69,0.35)', backgroundColor: theme.surface },
-  avatarImg: { width: '100%', height: '100%' },
-  nickname: { fontSize: 18, fontWeight: '900', color: theme.ink, marginTop: 12 },
-  motto: { fontSize: 12, color: theme.muted, marginTop: 5, fontWeight: '600' },
-  statsRow: { flexDirection: 'row', gap: 10, marginTop: 22, width: '100%' },
-  statCard: { flex: 1, backgroundColor: theme.surface, borderRadius: 16, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: theme.line },
-  statValue: { fontSize: 22, fontWeight: '900', color: theme.primaryDeep },
-  statLabel: { fontSize: 12, color: theme.muted, fontWeight: '700', marginTop: 4 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 26, marginBottom: 12 },
-  sectionTitle: { fontSize: 17, fontWeight: '900', color: theme.ink },
-  sectionSub: { fontSize: 12, color: theme.muted, fontWeight: '700' },
-  historyList: { backgroundColor: theme.surface, borderRadius: 18, borderWidth: 1, borderColor: theme.line, overflow: 'hidden' },
-  historyRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, paddingHorizontal: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.line },
-  historyRowPressed: { opacity: 0.7 },
-  historyEmoji: { width: 36, height: 36, borderRadius: 12, backgroundColor: '#E9EFE6', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  historyTitle: { fontSize: 15, fontWeight: '800', color: theme.ink },
-  historyMeta: { fontSize: 12, color: theme.muted, fontWeight: '600', marginTop: 3 },
-  historyArrow: { fontSize: 20, color: '#8A9489', fontWeight: '700' },
-  center: { alignItems: 'center', paddingVertical: 50 },
-  emptyCard: { alignItems: 'center', paddingVertical: 40, backgroundColor: theme.surface, borderRadius: 18, borderWidth: 1, borderColor: theme.line },
-  emptyIcon: { marginBottom: 12 },
-  emptyTxt: { fontSize: 13, color: theme.muted, fontWeight: '600' },
-  aboutCard: { marginTop: 20, paddingHorizontal: 4 },
-  aboutLine: { fontSize: 12, color: theme.muted, fontWeight: '700', textAlign: 'center' },
-  aboutLine2: { fontSize: 11, color: '#8A9489', marginTop: 6, textAlign: 'center', lineHeight: 16 },
+  content: { paddingHorizontal: 20, paddingBottom: 40 },
+  topBranch: { position: 'absolute', top: 0, right: 0, width: 140, height: 100, opacity: 0.95 },
+  header: { paddingTop: 8 },
+  title: { fontSize: 28, fontWeight: '900', color: theme.ink },
+  subtitle: { fontSize: 12, color: theme.muted, marginTop: 6 },
+
+  heroCard: { alignItems: 'center', marginTop: 20, paddingVertical: 20, paddingHorizontal: 18, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.34)' },
+  avatarRing: { width: 102, height: 102, borderRadius: 51, padding: 7, backgroundColor: 'rgba(255,255,255,0.7)' },
+  avatar: { width: '100%', height: '100%', borderRadius: 999 },
+  nickname: { fontSize: 22, fontWeight: '900', color: theme.ink, marginTop: 14 },
+  bio: { fontSize: 13, color: theme.inkSoft, marginTop: 8 },
+  statsRow: { flexDirection: 'row', justifyContent: 'space-around', width: '100%', marginTop: 24 },
+  statCol: { alignItems: 'center', minWidth: 72 },
+  statValue: { fontSize: 28, fontWeight: '900', color: theme.ink },
+  statLabel: { fontSize: 11, color: theme.muted, marginTop: 4 },
+
+  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 24, marginBottom: 12 },
+  sectionTitle: { fontSize: 18, fontWeight: '900', color: theme.ink },
+  sectionMeta: { fontSize: 12, color: theme.muted, fontWeight: '700' },
+  center: { alignItems: 'center', paddingTop: 40 },
+
+  blockCard: { backgroundColor: theme.surface, borderRadius: 22, overflow: 'hidden', borderWidth: 1, borderColor: theme.line },
+  historyRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.line },
+  historyLastRow: { borderBottomWidth: 0 },
+  historyCircle: { width: 52, height: 52, borderRadius: 26 },
+  historyTitle: { fontSize: 16, fontWeight: '800', color: theme.ink },
+  historyMeta: { fontSize: 12, color: theme.muted, marginTop: 4 },
+
+  emptyCard: { backgroundColor: theme.surface, borderRadius: 18, padding: 24, alignItems: 'center', gap: 12 },
+  emptyTxt: { fontSize: 13, color: theme.muted, marginTop: 12 },
+
+  settingsCard: { backgroundColor: theme.surface, borderRadius: 22, marginTop: 20, overflow: 'hidden', borderWidth: 1, borderColor: theme.line },
+  settingRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 15, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.line },
+  settingLastRow: { borderBottomWidth: 0 },
+  settingIconWrap: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#EEE8DA', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  settingLabel: { flex: 1, fontSize: 14, color: theme.ink, fontWeight: '700' },
+  settingArrow: { fontSize: 18, color: theme.muted },
 });

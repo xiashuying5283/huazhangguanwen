@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSafeSearchParams } from '@/hooks/useSafeRouter';
@@ -9,9 +9,9 @@ import { PaginationBar } from '@/components/PaginationBar';
 import { Api, type AuthorSummary, type Paged, type PoemSummary, type WorkSummary } from '@/utils/api';
 import { theme } from '@/theme';
 
-const PAGE = 50;
+const PAGE = 30;
+const FILTERS = ['诗集', '词集', '文集', '总集'];
 
-/** 按作者/名称关键词匹配古风书封 */
 const BOOK_COVERS: Record<string, number> = {
   libai: require('@/assets/guanwen/book_covers/libai_collection.png'),
   dufu: require('@/assets/guanwen/book_covers/dufu_collection.png'),
@@ -33,6 +33,13 @@ function coverFor(name: string): number {
   return FALLBACK_COVER;
 }
 
+function inferType(name: string) {
+  if (/词|乐府/.test(name)) return '词集';
+  if (/全唐诗|总集|诗话/.test(name)) return '总集';
+  if (/集|别集/.test(name)) return '诗集';
+  return '文集';
+}
+
 export default function LibraryScreen() {
   const { work: initWork } = useSafeSearchParams<{ work?: string }>();
   const [authors, setAuthors] = useState<AuthorSummary[]>([]);
@@ -46,29 +53,27 @@ export default function LibraryScreen() {
   const [loading, setLoading] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
   const [filterKind, setFilterKind] = useState<'author' | 'work' | null>(null);
+  const [typeFilter, setTypeFilter] = useState('诗集');
 
-  const selectedAuthor = authors.find((a) => a.id === authorId)?.name;
-  const selectedWork = works.find((w) => w.id === workId)?.name;
+  const selectedWork = works.find((w) => w.id === workId) ?? null;
 
   const loadMeta = useCallback(async () => {
     try {
       const [a, w] = await Promise.all([
-        // 服务端文件：server/src/routes/content.ts
-        // 接口：GET /api/v1/authors ；Query 参数：limit?: number
         Api.get<Paged<AuthorSummary>>('/api/v1/authors?limit=60'),
-        // 服务端文件：server/src/routes/content.ts
-        // 接口：GET /api/v1/works
         Api.get<WorkSummary[]>('/api/v1/works'),
       ]);
-      setAuthors(a.list); setWorks(w);
-    } catch { /* 不阻塞 */ }
+      setAuthors(a.list);
+      setWorks(w);
+    } catch {
+      setAuthors([]);
+      setWorks([]);
+    }
   }, []);
 
   const loadPoems = useCallback(async (p: number) => {
     setLoading(true);
     try {
-      // 服务端文件：server/src/routes/content.ts
-      // 接口：GET /api/v1/poems ；Query 参数：author_id?: string, work_id?: string, limit?: number, offset?: number
       const params: string[] = [];
       if (authorId) params.push(`author_id=${authorId}`);
       if (workId) params.push(`work_id=${workId}`);
@@ -78,11 +83,14 @@ export default function LibraryScreen() {
       setPage(data.page);
       setTotalPages(data.totalPages);
       setTotal(data.total);
-    } catch { setPoems([]); setTotal(0); setTotalPages(1); }
+    } catch {
+      setPoems([]);
+      setTotal(0);
+      setTotalPages(1);
+    }
     setLoading(false);
   }, [authorId, workId]);
 
-  // 筛选变化时回到第一页（异步触发，避免 effect 内同步 setState）
   useEffect(() => {
     const id = setTimeout(() => loadPoems(1), 0);
     return () => clearTimeout(id);
@@ -90,56 +98,52 @@ export default function LibraryScreen() {
 
   useFocusEffect(useCallback(() => { loadMeta(); loadPoems(1); }, [loadMeta, loadPoems]));
 
+  const filteredWorks = useMemo(() => works.filter((w) => inferType(w.name) === typeFilter).slice(0, 8), [works, typeFilter]);
+
   return (
     <Screen backgroundColor={theme.bgRoot} safeAreaEdges={['left', 'right', 'bottom']} style={{ flex: 1 }}>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* 顶部导航行 */}
-        <View style={styles.navRow}>
-          <Text style={styles.navTitle}>文库</Text>
-          <View style={styles.navIcons}>
-            <Pressable onPress={() => setSearchOpen(true)} style={styles.navIcon} hitSlop={6}>
-              <Image source={require('@/assets/guanwen/backgrounds/mountains_fog.png')} style={styles.hidden} />
-              <Text style={styles.navIconTxt}>⌕</Text>
-            </Pressable>
-            <Pressable onPress={() => setFilterKind('work')} style={styles.navIcon} hitSlop={6}>
-              <Text style={styles.navIconTxt}>≡</Text>
-            </Pressable>
-          </View>
+        <Image source={require('@/assets/guanwen/decorations/distant_mountain.png')} style={styles.headerBg} />
+
+        <View style={styles.headerRow}>
+          <Text style={styles.title}>文库</Text>
+          <Pressable onPress={() => setSearchOpen(true)} style={styles.searchIconBtn}>
+            <Text style={styles.searchTxt}>⌕</Text>
+          </Pressable>
         </View>
 
-        {/* 搜索栏 */}
         <Pressable style={styles.searchBar} onPress={() => setSearchOpen(true)}>
-          <Text style={styles.searchIcon}>⌕</Text>
+          <Text style={styles.searchLeading}>⌕</Text>
           <Text style={styles.searchPlaceholder}>搜索诗文、作者、文集...</Text>
         </Pressable>
 
-        {/* 收录诗集头部 */}
-        <View style={styles.listHeader}>
-          <Text style={styles.resultLabel}>
-            {selectedWork ? `《${selectedWork}》 · ${total.toLocaleString()} 篇` : `共 ${total.toLocaleString()} 篇诗文`}
-          </Text>
-          {(authorId || workId) ? (
-            <Pressable onPress={() => { setAuthorId(null); setWorkId(null); }} hitSlop={8}>
-              <Text style={styles.clearTxt}>清除筛选</Text>
+        <View style={styles.filterRow}>
+          {FILTERS.map((item) => (
+            <Pressable key={item} onPress={() => setTypeFilter(item)} style={[styles.filterPill, typeFilter === item && styles.filterPillActive]}>
+              <Text style={[styles.filterPillTxt, typeFilter === item && styles.filterPillTxtActive]}>{item}</Text>
             </Pressable>
-          ) : null}
+          ))}
         </View>
 
-        {/* 作品集书封列表 */}
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionTitle}>典藏文集</Text>
+          <Pressable onPress={() => setFilterKind('work')}><Text style={styles.sectionMeta}>全部文集</Text></Pressable>
+        </View>
+
         <View style={styles.worksBlock}>
-          {works.slice(0, 6).map((w) => {
+          {(filteredWorks.length ? filteredWorks : works.slice(0, 6)).map((w) => {
             const active = w.id === workId;
             return (
-              <Pressable key={w.id} style={({ pressed }) => [styles.workCard, active && styles.workCardActive, pressed && styles.pressed]}
-                onPress={() => { setWorkId(active ? null : w.id); setAuthorId(null); }}>
-                <View style={styles.workCover}>
-                  <Image source={coverFor(w.name)} style={styles.workCoverImg} />
-                  <Text style={styles.workCoverTitle}>{w.name.replace('全集', '').replace('乐府', '').replace('词集', '')}</Text>
-                </View>
+              <Pressable
+                key={w.id}
+                style={[styles.workCard, active && styles.workCardActive]}
+                onPress={() => { setWorkId(active ? null : w.id); setAuthorId(null); }}
+              >
+                <Image source={coverFor(w.name)} style={styles.workCover} />
                 <View style={styles.workBody}>
-                  <Text style={styles.workName} numberOfLines={1}>{w.name}</Text>
-                  <Text style={styles.workMeta}>{w.era || ''}</Text>
-                  <Text style={styles.workCount}>{works.length} 部文集</Text>
+                  <Text style={styles.workName}>{w.name}</Text>
+                  <Text style={styles.workMeta}>{w.author_name ? `${w.author_name} · ` : ''}{w.era || inferType(w.name)}</Text>
+                  <Text style={styles.workDesc} numberOfLines={2}>{w.description || '按卷次与篇目连续阅读，进入作者作品体系。'}</Text>
                 </View>
                 <Text style={styles.workArrow}>›</Text>
               </Pressable>
@@ -147,7 +151,16 @@ export default function LibraryScreen() {
           })}
         </View>
 
-        {/* 诗文列表 */}
+        <View style={styles.poemsHead}>
+          <View>
+            <Text style={styles.sectionTitle}>{selectedWork ? `《${selectedWork.name}》` : '收录诗文'}</Text>
+            <Text style={styles.poemsSub}>{selectedWork ? '选段与诗文篇目' : '按条件筛选的诗文结果'}</Text>
+          </View>
+          <Pressable onPress={() => setFilterKind('author')}>
+            <Text style={styles.sectionMeta}>{authorId ? '切换人物' : `${total} 篇`}</Text>
+          </Pressable>
+        </View>
+
         {loading ? (
           <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
         ) : poems.length ? (
@@ -177,10 +190,11 @@ export default function LibraryScreen() {
           onClose={() => setFilterKind(null)}
         />
       ) : null}
+
       {filterKind === 'work' ? (
         <FilterSheet
-          title="按作品集筛选"
-          options={[{ key: '', label: '全部作品集' }, ...works.map((w) => ({ key: w.id, label: `《${w.name}》` }))]}
+          title="按文集筛选"
+          options={[{ key: '', label: '全部文集' }, ...works.map((w) => ({ key: w.id, label: `《${w.name}》` }))]}
           current={workId ?? ''}
           onSelect={(key) => { setWorkId(key || null); setAuthorId(null); setFilterKind(null); }}
           onClose={() => setFilterKind(null)}
@@ -200,15 +214,14 @@ function FilterSheet({ title, options, current, onSelect, onClose }: {
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.sheetMask} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={() => { /* 阻止穿透 */ }}>
+        <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <Text style={styles.sheetTitle}>{title}</Text>
           <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
             {options.map((o) => {
               const active = o.key === current;
               return (
-                <Pressable key={o.key} style={({ pressed }) => [styles.sheetItem, pressed && styles.sheetItemPressed]}
-                  onPress={() => onSelect(o.key)}>
-                  <Text style={[styles.sheetItemTxt, active && styles.sheetItemTxtActive]} numberOfLines={1}>{o.label}</Text>
+                <Pressable key={o.key} style={styles.sheetItem} onPress={() => onSelect(o.key)}>
+                  <Text style={[styles.sheetItemTxt, active && styles.sheetItemTxtActive]}>{o.label}</Text>
                   {active ? <Text style={styles.sheetItemCheck}>✓</Text> : null}
                 </Pressable>
               );
@@ -222,54 +235,45 @@ function FilterSheet({ title, options, current, onSelect, onClose }: {
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 20, paddingBottom: 40 },
-  hidden: { position: 'absolute', opacity: 0, width: 1, height: 1 },
+  headerBg: { position: 'absolute', top: 0, left: 0, right: 0, width: '100%', height: 72, opacity: 0.18 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, paddingBottom: 12 },
+  title: { fontSize: 28, fontWeight: '900', color: theme.ink },
+  searchIconBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: theme.surface, alignItems: 'center', justifyContent: 'center' },
+  searchTxt: { fontSize: 18, color: theme.primaryDeep, marginTop: -1 },
+  searchBar: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 46, backgroundColor: theme.surface, borderRadius: 18, paddingHorizontal: 14, borderWidth: 1, borderColor: '#EFE5D2' },
+  searchLeading: { fontSize: 16, color: theme.muted },
+  searchPlaceholder: { fontSize: 13, color: theme.muted },
 
-  navRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, paddingTop: 4 },
-  navTitle: { fontSize: 24, fontWeight: '900', color: theme.ink, letterSpacing: 1 },
-  navIcons: { flexDirection: 'row', gap: 8 },
-  navIcon: { width: 40, height: 40, borderRadius: 14, backgroundColor: theme.surface, alignItems: 'center', justifyContent: 'center' },
-  navIconTxt: { fontSize: 22, color: 'rgba(42,42,42,0.7)', fontWeight: '600' },
+  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 14, marginBottom: 8 },
+  filterPill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, backgroundColor: '#EEE7DA' },
+  filterPillActive: { backgroundColor: theme.primary },
+  filterPillTxt: { fontSize: 13, color: theme.inkSoft, fontWeight: '700' },
+  filterPillTxtActive: { color: '#fff' },
 
-  searchBar: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: theme.surface, borderRadius: 24,
-    paddingHorizontal: 16, paddingVertical: 12, marginTop: 6,
-    shadowColor: '#000000', shadowOffset: { width: 0, height: 2 }, shadowRadius: 6, shadowOpacity: 0.03, elevation: 1,
-  },
-  searchIcon: { fontSize: 18, color: theme.muted, marginRight: 8 },
-  searchPlaceholder: { fontSize: 14, color: theme.muted },
+  sectionRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 20, marginBottom: 12 },
+  sectionTitle: { fontSize: 18, fontWeight: '900', color: theme.ink },
+  sectionMeta: { fontSize: 12, color: theme.muted, fontWeight: '700' },
 
-  listHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 22, marginBottom: 12 },
-  resultLabel: { fontSize: 14, color: theme.muted, fontWeight: '700' },
-  clearTxt: { fontSize: 13, color: theme.primaryDeep, fontWeight: '700' },
+  worksBlock: { gap: 12 },
+  workCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: theme.surface, borderRadius: 22, padding: 14, borderWidth: 1, borderColor: theme.line },
+  workCardActive: { borderColor: theme.primary, backgroundColor: '#F3EEE2' },
+  workCover: { width: 62, height: 82, borderRadius: 8 },
+  workBody: { flex: 1 },
+  workName: { fontSize: 17, fontWeight: '800', color: theme.ink },
+  workMeta: { fontSize: 12, color: theme.primaryDeep, fontWeight: '700', marginTop: 4 },
+  workDesc: { fontSize: 12, color: theme.inkSoft, lineHeight: 19, marginTop: 7 },
+  workArrow: { fontSize: 18, color: theme.muted },
 
-  worksBlock: { marginBottom: 6 },
-  workCard: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: theme.surface, borderRadius: 18,
-    padding: 14, marginBottom: 12,
-    shadowColor: '#000000', shadowOffset: { width: 0, height: 2 }, shadowRadius: 6, shadowOpacity: 0.04, elevation: 2,
-  },
-  workCardActive: { borderWidth: 1, borderColor: theme.primary },
-  pressed: { opacity: 0.85 },
-  workCover: { width: 64, height: 88, borderRadius: 8, overflow: 'hidden', backgroundColor: theme.bgSoft, alignItems: 'center', justifyContent: 'center' },
-  workCoverImg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
-  workCoverTitle: {
-    fontSize: 12, fontWeight: '800', color: '#FFFDF6', textAlign: 'center', letterSpacing: 2,
-    backgroundColor: 'rgba(42,42,42,0.32)', paddingHorizontal: 2, paddingVertical: 3, borderRadius: 4,
-  },
-  workBody: { flex: 1, marginLeft: 14 },
-  workName: { fontSize: 16, fontWeight: '900', color: theme.ink },
-  workMeta: { fontSize: 13, color: theme.muted, marginTop: 4, fontWeight: '600' },
-  workCount: { fontSize: 13, color: theme.muted, marginTop: 4, fontWeight: '600' },
-  workArrow: { fontSize: 24, color: 'rgba(42,42,42,0.35)', marginLeft: 8, marginTop: -2 },
-
-  sheetMask: { flex: 1, backgroundColor: 'rgba(15,10,15,0.4)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: theme.bgRoot, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 18, paddingBottom: 30, paddingHorizontal: 20, maxHeight: '70%' },
-  sheetTitle: { fontSize: 16, fontWeight: '800', color: theme.ink, marginBottom: 6, textAlign: 'center' },
-  sheetItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.line },
-  sheetItemPressed: { opacity: 0.7 },
-  sheetItemTxt: { fontSize: 15, color: theme.ink, fontWeight: '700' },
-  sheetItemTxtActive: { color: theme.primaryDeep },
-  sheetItemCheck: { fontSize: 16, color: theme.primaryDeep, fontWeight: '800' },
-  center: { alignItems: 'center', paddingTop: 60, paddingBottom: 40 },
+  poemsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 24, marginBottom: 12 },
+  poemsSub: { fontSize: 12, color: theme.muted, marginTop: 4 },
+  center: { alignItems: 'center', paddingTop: 40 },
   emptyTxt: { color: theme.muted, fontWeight: '600' },
+
+  sheetMask: { flex: 1, backgroundColor: 'rgba(0,0,0,0.18)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: theme.bgRoot, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 16, paddingHorizontal: 20, paddingBottom: 24 },
+  sheetTitle: { fontSize: 18, fontWeight: '900', color: theme.ink, marginBottom: 12 },
+  sheetItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.line },
+  sheetItemTxt: { fontSize: 15, color: theme.ink },
+  sheetItemTxtActive: { color: theme.primaryDeep, fontWeight: '800' },
+  sheetItemCheck: { fontSize: 16, color: theme.primaryDeep, fontWeight: '900' },
 });
