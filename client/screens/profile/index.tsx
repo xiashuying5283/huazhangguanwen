@@ -1,10 +1,9 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { Screen } from '@/components/Screen';
-import { AppHeader } from '@/components/AppHeader';
 import { Api } from '@/utils/api';
 import { getDeviceId } from '@/utils/device';
 import { theme } from '@/theme';
@@ -58,23 +57,22 @@ export default function ProfileScreen() {
 
   return (
     <Screen backgroundColor={theme.bgRoot} safeAreaEdges={['left', 'right', 'bottom']} style={{ flex: 1 }}>
-      <AppHeader title="我的" icon="heart" subtitle="阅读足迹与偏好" />
-      <View style={styles.content}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* 顶部红梅装饰 */}
+        <Image source={require('@/assets/guanwen/decorations/pink_plum_branch.png')} style={styles.topPlum} />
 
-        {/* 个人信息卡 */}
-        <View style={styles.profileCard}>
-          <View style={styles.avatar}><FontAwesome6 name="book-open" size={24} color={theme.primaryDeep} /></View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.nickname}>我的书斋</Text>
-            <Text style={styles.motto}>书卷多情似故人，晨昏忧乐每相亲。</Text>
+        {/* 个人中心：居中圆头像 + 用户名 + 数据 */}
+        <View style={styles.userCard}>
+          <View style={styles.avatarBig}>
+            <Image source={require('@/assets/guanwen/circles/misty_mountains.png')} style={styles.avatarImg} />
           </View>
-        </View>
-
-        {/* 统计区 */}
-        <View style={styles.statsRow}>
-          <StatCard value={readTotal} label="读过篇数" />
-          <StatCard value={readCount} label="阅读次数" />
-          <StatCard value={authorCount} label="涉猎作家" />
+          <Text style={styles.nickname}>观文书客</Text>
+          <Text style={styles.motto}>读书破万卷，下笔如有神</Text>
+          <View style={styles.statsRow}>
+            <StatCard value={readTotal} label="读过篇数" />
+            <StatCard value={readCount} label="阅读次数" />
+            <StatCard value={authorCount} label="涉猎作家" />
+          </View>
         </View>
 
         {/* 最近阅读 */}
@@ -113,7 +111,7 @@ export default function ProfileScreen() {
           <Text style={styles.aboutLine}>「古诗文精读」· 亲测可用的萌系阅读小站</Text>
           <Text style={styles.aboutLine2}>收录全唐诗、全宋词、全宋诗、元曲、楚辞、诗经、四书及蒙学等典籍</Text>
         </View>
-      </View>
+      </ScrollView>
     </Screen>
   );
 }
@@ -129,11 +127,13 @@ function StatCard({ value, label }: { value: number; label: string }) {
 
 const styles = StyleSheet.create({
   content: { padding: 20, paddingBottom: 40 },
-  profileCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.surface, borderRadius: 20, padding: 18, borderWidth: 1, borderColor: theme.line },
-  avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#E9EFE6', alignItems: 'center', justifyContent: 'center', marginRight: 14 },
-  nickname: { fontSize: 18, fontWeight: '900', color: theme.ink },
-  motto: { fontSize: 12, color: theme.muted, marginTop: 4 },
-  statsRow: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  topPlum: { position: 'absolute', top: -6, right: 0, width: 118, height: 96, opacity: 0.9 },
+  userCard: { alignItems: 'center', paddingTop: 6 },
+  avatarBig: { width: 84, height: 84, borderRadius: 42, overflow: 'hidden', borderWidth: 2, borderColor: 'rgba(90,107,69,0.35)', backgroundColor: theme.surface },
+  avatarImg: { width: '100%', height: '100%' },
+  nickname: { fontSize: 18, fontWeight: '900', color: theme.ink, marginTop: 12 },
+  motto: { fontSize: 12, color: theme.muted, marginTop: 5, fontWeight: '600' },
+  statsRow: { flexDirection: 'row', gap: 10, marginTop: 22, width: '100%' },
   statCard: { flex: 1, backgroundColor: theme.surface, borderRadius: 16, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: theme.line },
   statValue: { fontSize: 22, fontWeight: '900', color: theme.primaryDeep },
   statLabel: { fontSize: 12, color: theme.muted, fontWeight: '700', marginTop: 4 },

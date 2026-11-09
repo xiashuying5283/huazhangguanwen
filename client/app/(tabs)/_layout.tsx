@@ -32,9 +32,9 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: '荐诗',
+          title: '首页',
           tabBarIcon: ({ color }) => (
-            <FontAwesome6 name="house" size={20} color={color} />
+            <FontAwesome6 name="house" size={19} color={color} />
           ),
         }}
       />
@@ -50,18 +50,18 @@ export default function TabLayout() {
       <Tabs.Screen
         name="library"
         options={{
-          title: '诗库',
+          title: '文库',
           tabBarIcon: ({ color }) => (
-            <FontAwesome6 name="book-open" size={20} color={color} />
+            <FontAwesome6 name="book-open" size={19} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: '书斋',
+          title: '我的',
           tabBarIcon: ({ color }) => (
-            <FontAwesome6 name="heart" size={20} color={color} />
+            <FontAwesome6 name="heart" size={19} color={color} />
           ),
         }}
       />

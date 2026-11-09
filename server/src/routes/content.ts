@@ -373,4 +373,24 @@ router.get('/recommend/daily', async (req, res) => {
   }
 });
 
+// 为你推荐：按阅读量取热门诗文列表
+// 服务端文件：server/src/routes/content.ts
+// 接口：GET /api/v1/recommend/list ；Query 参数：limit?: number
+router.get('/recommend/list', async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(Number(req.query.limit || 5), 1), 10);
+    const { data, error } = await client
+      .from('poems')
+      .select('id, title, dynasty, genre, cover_emoji, background_hint, author_id, authors(name, avatar_emoji)')
+      .order('read_count', { ascending: false })
+      .range(0, limit - 1);
+    if (error) throw new Error(error.message);
+    res.json((data || []).map((p: any) => ({
+      ...p, author_name: p.authors?.name, author_emoji: p.authors?.avatar_emoji,
+    })));
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 export default router;
