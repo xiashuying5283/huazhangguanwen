@@ -15,6 +15,19 @@ import { theme } from '@/theme';
 const tabs = ['注释', '译文', '赏析', '创作背景'] as const;
 const fields = { 注释: 'annotation', 译文: 'translation', 赏析: 'appreciation', 创作背景: 'creation_background' } as const;
 type Tab = (typeof tabs)[number];
+const ANNO_NUMS = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩','⑪','⑫'];
+/** 把注释文本规范化为「一条一行 + 连续序号」 */
+function toAnnoLines(text?: string | null): string[] {
+  if (!text?.trim()) return [];
+  const s = text.replace(/[\r\n]+/g, '\n');
+  let parts = s.split(/(?=[①②③④⑤⑥⑦⑧⑨⑩])/).map((x) => x.trim()).filter(Boolean);
+  if (parts.length <= 1) parts = s.split(/\n/).map((x) => x.trim()).filter(Boolean);
+  if (parts.length <= 1) parts = s.split(/。/).map((x) => x.trim()).filter(Boolean);
+  return parts
+    .map((x) => x.replace(/^[①②③④⑤⑥⑦⑧⑨⑩]+/, '').replace(/^\d+[.、)）]?\s*/, '').trim())
+    .filter(Boolean)
+    .map((x, i) => `${ANNO_NUMS[i] ?? (i + 1) + '.'} ${x}`);
+}
 type Analysis = Pick<PoemDetail, 'annotation' | 'translation' | 'appreciation'>;
 
 export default function ReadScreen() {
@@ -88,7 +101,19 @@ export default function ReadScreen() {
             <Segments options={tabs} value={tab} onChange={setTab} />
             <View style={styles.annotation}>
               <Ink style={styles.annotationHeading}>{tab}</Ink>
-              <Ink style={styles.annotationText}>{explanation?.replace(/\s*([①②③④⑤⑥⑦⑧⑨⑩])/g, '\n$1').trim() || (generating ? '正在整理赏读内容…' : `暂未收录${tab}`)}</Ink>
+              {tab === '注释' ? (
+                toAnnoLines(explanation).length > 0 ? (
+                  toAnnoLines(explanation).map((line, index) => (
+                    <View key={index} style={styles.annoLine}>
+                      <Ink style={styles.annotationText}>{line}</Ink>
+                    </View>
+                  ))
+                ) : (
+                  <Ink style={styles.annotationText}>{generating ? '正在整理赏读内容…' : `暂未收录${tab}`}</Ink>
+                )
+              ) : (
+                <Ink style={styles.annotationText}>{explanation?.replace(/\s*([①②③④⑤⑥⑦⑧⑨⑩])/g, '\n$1').trim() || (generating ? '正在整理赏读内容…' : `暂未收录${tab}`)}</Ink>
+              )}
             </View>
           </View>
         </>}
@@ -140,6 +165,7 @@ const styles = StyleSheet.create({
   py: { fontSize: 11, color: theme.primaryDeep, minHeight: 15 },
   annotation: { padding: 15, paddingTop: 12 },
   annotationHeading: { fontSize: 20, marginBottom: 5 },
+  annoLine: { marginBottom: 3 },
   annotationText: { fontSize: 17, lineHeight: 26 },
   note: { minHeight: 120, textAlignVertical: 'top', borderColor: theme.line, borderWidth: 1, borderRadius: 10, padding: 10, color: theme.ink, marginBottom: 12, fontSize: 16 },
 });
