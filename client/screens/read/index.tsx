@@ -132,7 +132,7 @@ export default function ReadScreen() {
               </View>
 
               <View style={styles.detailCard}>
-                {tab === 'annotation' && <Section label="注解" text={poem.annotation ?? ''} generating={genState === 'generating' && !poem.annotation} />}
+                {tab === 'annotation' && <Section label="注解" text={poem.annotation ?? ''} generating={genState === 'generating' && !poem.annotation} perLine />}
                 {tab === 'translate' && <Section label="现代翻译" text={poem.translation ?? ''} generating={genState === 'generating' && !poem.translation} />}
                 {tab === 'appreciate' && <Section label="赏析" text={poem.appreciation ?? ''} generating={genState === 'generating' && !poem.appreciation} />}
               </View>
@@ -170,7 +170,7 @@ function PoemBody({ content, pinyin }: { content: string; pinyin?: PinyinChar[][
   );
 }
 
-function Section({ label, text, generating }: { label: string; text: string; generating?: boolean }) {
+function Section({ label, text, generating, perLine }: { label: string; text: string; generating?: boolean; perLine?: boolean }) {
   let content: string;
   if (generating) {
     content = '正在用大模型生成中，请稍候…';
@@ -179,10 +179,15 @@ function Section({ label, text, generating }: { label: string; text: string; gen
   } else {
     content = '暂无' + label + '，可下拉或稍后重试。';
   }
+  const lines: string[] = perLine && !!text
+    ? content.replace(/[。！？;；]/g, (m) => m + '\n').split('\n').map((s) => s.trim()).filter(Boolean)
+    : [content];
   return (
     <View>
       <Text style={styles.sectionLabel}>{label}{generating ? '（生成中…）' : ''}</Text>
-      <Text style={styles.sectionText}>{content}</Text>
+      {lines.map((ln, i) => (
+        <Text key={i} style={styles.sectionText}>{ln}</Text>
+      ))}
     </View>
   );
 }
