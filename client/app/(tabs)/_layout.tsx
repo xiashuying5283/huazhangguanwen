@@ -1,22 +1,13 @@
 import { Tabs } from 'expo-router';
 import { Platform, type ViewStyle } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FontAwesome6 } from '@expo/vector-icons';
-import { useCSSVariable } from 'uniwind';
+import { theme } from '@/theme';
 
 export default function TabLayout() {
-  const insets = useSafeAreaInsets();
-  const [background, muted, accent, border] = useCSSVariable([
-    '--color-background',
-    '--color-muted',
-    '--color-accent',
-    '--color-border',
-  ]) as string[];
-
   let tabBarStyle: ViewStyle = {
-    backgroundColor: background,
+    backgroundColor: theme.surface,
     borderTopWidth: 1,
-    borderTopColor: border,
+    borderTopColor: theme.line,
   };
 
   // 用于修复 Web 上高度异常的问题（这个 if 逻辑必须添加）
@@ -32,8 +23,8 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle,
-        tabBarActiveTintColor: accent,
-        tabBarInactiveTintColor: muted,
+        tabBarActiveTintColor: theme.primaryDeep,
+        tabBarInactiveTintColor: theme.muted,
         tabBarLabelStyle: { fontSize: 12, fontWeight: '700' },
       }}
     >

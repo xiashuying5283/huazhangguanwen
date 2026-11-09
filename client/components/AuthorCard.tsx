@@ -28,7 +28,7 @@ export const AuthorCard = memo(function AuthorCard({ author }: { author: AuthorS
   );
 });
 
-const AVATAR_BG = ['#FFDCE5', '#E3DDFF', '#DCEDFF', '#DFF5E8', '#FFF0D6', '#E6F5D8'];
+const AVATAR_BG = ['#E9EFE6', '#DCE8DA', '#E9E2D4', '#EFE3D2', '#E7E0D2', '#F0E9DD'];
 function pick(id: string) {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h + id.charCodeAt(i)) % 9973;

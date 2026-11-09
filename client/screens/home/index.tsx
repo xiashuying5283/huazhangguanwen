@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { useSafeRouter } from '@/hooks/useSafeRouter';
@@ -55,6 +55,8 @@ export default function HomeScreen() {
         ) : daily ? (
           <>
             <View style={styles.hero}>
+              <Image source={require('@/assets/guanwen/circles/misty_mountains.png')} style={styles.heroMedal} />
+              <Image source={require('@/assets/guanwen/decorations/distant_mountain.png')} style={styles.heroMount} />
               <View style={styles.heroBadge}>
                 <Text style={styles.heroBadgeTxt}>今日推荐</Text>
               </View>
@@ -80,9 +82,9 @@ export default function HomeScreen() {
             <View style={styles.quickSection}>
               <Text style={styles.sectionTitle}>去逛一逛</Text>
               <View style={styles.quickRow}>
-                <QuickBtn icon="user-pen" label="人物中心" color="#E3DDFF" onPress={() => router.push('/poets')} />
-                <QuickBtn icon="book-open" label="诗库" color="#DCEDFF" onPress={() => router.push('/library')} />
-                <QuickBtn icon="magnifying-glass" label="搜一搜" color="#FFDCE5" onPress={() => setSearchOpen(true)} />
+                <QuickBtn icon="user-pen" label="人物中心" color="#E0EADF" onPress={() => router.push('/poets')} />
+                <QuickBtn icon="book-open" label="诗库" color="#EFE3D4" onPress={() => router.push('/library')} />
+                <QuickBtn icon="magnifying-glass" label="搜一搜" color="#F2DCD3" onPress={() => setSearchOpen(true)} />
               </View>
             </View>
           </>
@@ -110,14 +112,17 @@ const styles = StyleSheet.create({
   center: { alignItems: 'center', paddingTop: 80 },
   error: { color: theme.primaryDeep, fontWeight: '600' },
   hero: {
-    backgroundColor: '#FFE7E4', borderRadius: 28, padding: 24, marginBottom: 20,
+    backgroundColor: '#F6EEDD', borderRadius: 28, padding: 24, marginBottom: 20,
+    overflow: 'hidden',
     ...SHADOW_PINK,
   },
-  heroBadge: { alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4 },
+  heroMedal: { position: 'absolute', top: 16, right: 16, width: 58, height: 58, borderRadius: 29, opacity: 0.92 },
+  heroMount: { position: 'absolute', bottom: -6, right: 0, width: 150, height: 56, opacity: 0.5, tintColor: theme.secondary },
+  heroBadge: { alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.75)', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4 },
   heroBadgeTxt: { color: theme.primaryDeep, fontSize: 12, fontWeight: '800', letterSpacing: 1 },
   heroTitle: { marginTop: 14, fontSize: 30, fontWeight: '900', color: theme.ink },
   heroAuthor: { marginTop: 6, fontSize: 14, color: theme.inkSoft, fontWeight: '700' },
-  heroDivider: { height: 1.5, backgroundColor: 'rgba(240,90,126,0.15)', marginVertical: 16 },
+  heroDivider: { height: 1.5, backgroundColor: 'rgba(53,87,67,0.14)', marginVertical: 16 },
   heroLines: { fontSize: 18, lineHeight: 34, color: theme.ink, fontWeight: '600', fontStyle: 'italic' },
   heroTags: { flexDirection: 'row', gap: 8, marginTop: 16 },
   heroTag: { backgroundColor: 'rgba(255,255,255,0.85)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
@@ -127,8 +132,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
   },
   heroBtnPressed: { opacity: 0.9, transform: [{ scale: 0.98 }] },
-  heroBtnTxt: { color: '#fff', fontSize: 16, fontWeight: '800' },
-  heroBtnArrow: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  heroBtnTxt: { color: '#FFFDF6', fontSize: 16, fontWeight: '800' },
+  heroBtnArrow: { color: '#FFFDF6', fontSize: 16, fontWeight: '800' },
   heroFoot: { marginTop: 12, fontSize: 12, color: theme.inkSoft, fontWeight: '600', textAlign: 'center' },
   quickSection: { marginTop: 6 },
   sectionTitle: { fontSize: 17, fontWeight: '800', color: theme.ink, marginBottom: 14, letterSpacing: 0.5 },

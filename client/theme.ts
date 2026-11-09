@@ -1,22 +1,26 @@
 /**
- * 甜奶油马卡龙主题 —— 可爱风格的统一色彩令牌
+ * 观文 · 水墨国风主题 —— 宣纸墨毫的统一色彩令牌
+ * 色板参考：墨绿 #355743 / 青绿 #5B7A6A / 米白 #F8F5EC /
+ *           宣纸 #EFE7DA / 赭石 #B28A6A / 胭红 #C76B5B
  */
 export const theme = {
-  bgRoot: '#FFF6F0',
-  bgSoft: '#FFEFE7',
-  surface: '#FFFFFF',
-  primary: '#FF7E9C',
-  primaryDeep: '#F05A7E',
-  secondary: '#A78BFA',
-  mint: '#5ED6B0',
-  sun: '#FFC857',
-  sky: '#7FB8FF',
-  ink: '#6B4A52',
-  inkSoft: '#8A6470',
-  muted: '#B99AA0',
-  line: '#FFE2DA',
-  shadowPrimary: 'rgba(255,126,156,0.16)',
-  shadowSoft: 'rgba(240,90,126,0.10)',
+  bgRoot: '#F7F3E9',      // 米白纸底
+  bgSoft: '#F1EADA',
+  surface: '#FFFDF6',     // 亮纸面（卡片）
+  primary: '#355743',     // 墨绿主色
+  primaryDeep: '#294733', // 深墨绿
+  secondary: '#5B7A6A',   // 青绿
+  mint: '#8FAE9A',        // 浅青绿
+  sun: '#C9A54A',         // 淡金
+  sky: '#8FA7B8',         // 远山青灰
+  accent: '#B28A6A',      // 赭石
+  cinnabar: '#C76B5B',    // 胭红（收藏/重点）
+  ink: '#39463E',         // 墨
+  inkSoft: '#617066',
+  muted: '#8C968A',
+  line: '#E4DBC6',
+  shadowPrimary: 'rgba(53,87,67,0.18)',
+  shadowSoft: 'rgba(53,87,67,0.10)',
 };
 
 export const SHADOW_PINK = {
@@ -35,22 +39,19 @@ export const SHADOW_SOFT = {
   elevation: 4,
 };
 
-/** 诗文卡片背景色池 */
+/** 诗文卡片背景色池 —— 水墨淡彩（宣纸/青绿/赭米/淡胭等） */
 export const CARD_BG: Record<string, string> = {
-  '#FFF1DC': '#FFF3DD',
-  '#E8E3FF': '#EAE5FF',
-  '#DCEFFF': '#E1F4FF',
-  '#E4F5E8': '#E7F7EC',
-  '#EAF6DC': '#EDF8E0',
-  '#FFE9F1': '#FFECF3',
-  '#E9E2FF': '#EDE7FF',
-  '#FFF3D8': '#FFF5DC',
-  '#E9E4D8': '#ECE7DC',
-  '#E9ECE3': '#EEF0E7',
-  '#E2ECFF': '#E6EEFF',
-  '#DCF6F3': '#E1F8F5',
-  '#E5ECFF': '#E9EFFF',
+  '#F1EADA': '#F3EDDE',   // 宣纸
+  '#E4ECE2': '#E7EFE5',   // 淡青
+  '#F0E5D8': '#F2E8DC',   // 赭米
+  '#E6E1D2': '#EAE5D7',   // 秋宣
+  '#DFE9E6': '#E3EDEA',   // 青灰
+  '#F2DFD6': '#F4E3DB',   // 淡胭
+  '#E9E2D6': '#EDE7DC',   // 竹纸
+  '#E5E7DC': '#E9EBE1',   // 苔绿
+  '#EFE8DC': '#F2ECE1',   // 米宣
+  '#DEE6DF': '#E3E9E3',   // 水青
 };
 
 export const pickCardBg = (hint?: string | null): string =>
-  (hint && CARD_BG[hint]) ? CARD_BG[hint] : '#FFF3E4';
+  (hint && CARD_BG[hint]) ? CARD_BG[hint] : '#F2ECDD';

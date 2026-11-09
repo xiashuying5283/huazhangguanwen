@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
   error: { color: theme.primaryDeep, fontWeight: '600' },
   body: { paddingHorizontal: 20, paddingBottom: 48 },
   hero: {
-    backgroundColor: '#FFE7E4', borderRadius: 28, paddingVertical: 28, paddingHorizontal: 22, alignItems: 'center',
+    backgroundColor: '#F3EBDB', borderRadius: 28, paddingVertical: 28, paddingHorizontal: 22, alignItems: 'center',
     ...SHADOW_SOFT, marginBottom: 18,
   },
   genrePill: { backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4, fontSize: 11, color: theme.primaryDeep, fontWeight: '800', overflow: 'hidden' },
