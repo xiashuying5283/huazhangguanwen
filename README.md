@@ -1,4 +1,21 @@
-# Expo App + Express.js
+# 观文 · Expo App + Express.js
+
+## 启动观文
+
+在 Coze 中继续开发时，将压缩包中 `projects/` 内的文件放回原项目根目录，使用原有 Coze 启动配置。前端默认访问原有 API，优先使用 Coze 注入的 `EXPO_PUBLIC_BACKEND_BASE_URL`，否则由 Web 同源代理转发。原数据库仍由项目原有 Coze / Supabase 环境配置提供。
+
+在本机查看内置选篇时，在项目根目录安装依赖并显式开启预览模式。
+
+```bash
+pnpm install --frozen-lockfile
+EXPO_PUBLIC_USE_LOCAL_CONTENT=1 pnpm --dir client exec expo start --web
+```
+
+打开 Expo 显示的本地地址。预览模式使用内置古诗文选篇，收藏、笔记、阅读记录与设置保存在当前浏览器或设备。首进首页会显示观文扉页，也可从「我的 → 数据与同步」重新查看。
+
+本地连接真实后端时，启动 Expo 前设置 `EXPO_PUBLIC_BACKEND_BASE_URL` 为后端地址。
+
+《山居秋暝》附带可拖动进度的普通话合成朗读。其他诗文使用设备或浏览器提供的中文朗读。
 
 ## 目录结构规范（严格遵循）
 

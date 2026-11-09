@@ -1,200 +1,139 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
-import { FontAwesome6 } from '@expo/vector-icons';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeRouter } from '@/hooks/useSafeRouter';
-import { Screen } from '@/components/Screen';
+import { useResource } from '@/hooks/useResource';
+import { IconButton, Ink, Message, PageHeader, Paper, paperStyles as p } from '@/components/Paper';
 import { SearchModal } from '@/components/SearchModal';
+import { Api, hasBackend, type PoemDetail, type PoemSummary } from '@/utils/api';
+import { art, poemArt, topics } from '@/data/art';
 import { getDeviceId } from '@/utils/device';
-import { Api, type PoemDetail } from '@/utils/api';
 import { theme } from '@/theme';
 
-interface Daily { date: string; reason: string; poem: PoemDetail; }
-interface RecItem { id: number; title: string; dynasty: string; genre?: string; author_name?: string; background_hint?: string; }
+const homeTopics = [topics[0], topics[2], topics[1], topics[3]];
 
-/** 分类圆图（对应截图：山水/咏物/思乡/边塞） */
-const CATS: { label: string; img: any }[] = [
-  { label: '山水', img: require('@/assets/guanwen/banners/landscape_topic.png') },
-  { label: '咏物', img: require('@/assets/guanwen/banners/plum_sentiment.png') },
-  { label: '思乡', img: require('@/assets/guanwen/banners/homesick_river.png') },
-  { label: '边塞', img: require('@/assets/guanwen/banners/frontier_wall.png') },
-];
-
-const REC_IMGS = [
-  require('@/assets/guanwen/banners/landscape_topic.png'),
-  require('@/assets/guanwen/banners/plum_sentiment.png'),
-  require('@/assets/guanwen/banners/homesick_river.png'),
-  require('@/assets/guanwen/banners/four_seasons.png'),
-  require('@/assets/guanwen/circles/sunset_river.png'),
-];
-
-function todayLabel(): string {
-  const d = new Date();
-  return `${d.getMonth() + 1}月${d.getDate()}日`;
+function dateLabel() {
+  const date = new Date();
+  const season = ['冬日', '春日', '夏日', '秋日'][Math.floor((date.getMonth() + 1) % 12 / 3)];
+  try {
+    const parts = new Intl.DateTimeFormat('zh-CN-u-ca-chinese', { month: 'long', day: 'numeric' }).formatToParts(date);
+    const month = parts.find((part) => part.type === 'month')?.value ?? '';
+    const day = Number(parts.find((part) => part.type === 'day')?.value);
+    const digits = '一二三四五六七八九十';
+    const dayName = day <= 10 ? `初${digits[day - 1]}` : day === 20 ? '二十' : day === 30 ? '三十'
+      : `${day < 20 ? '十' : '廿'}${digits[day % 10 - 1]}`;
+    const lunar = month && day ? `${month}${dayName}` : `${date.getMonth() + 1}月${date.getDate()}日`;
+    return `${lunar} · ${season}`;
+  } catch {
+    return `${date.getMonth() + 1}月${date.getDate()}日 · ${season}`;
+  }
 }
 
 export default function HomeScreen() {
   const router = useSafeRouter();
-  const [daily, setDaily] = useState<Daily | null>(null);
-  const [recs, setRecs] = useState<RecItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const { width } = useWindowDimensions();
+  const topicSize = Math.max(42, Math.min(69, (width - 54) / 5));
   const [searchOpen, setSearchOpen] = useState(false);
-
+  const [index, setIndex] = useState(0);
   const load = useCallback(async () => {
-    setLoading(true); setError('');
-    try {
-      const deviceId = await getDeviceId();
-      // 服务端文件：server/src/routes/content.ts
-      // 接口：GET /api/v1/recommend/daily ；Query 参数：device_id: string
-      const data = await Api.get<Daily>(`/api/v1/recommend/daily?device_id=${deviceId}`);
-      setDaily(data);
-      // 服务端文件：server/src/routes/content.ts
-      // 接口：GET /api/v1/recommend/list ；Query 参数：limit?: number
-      const list = await Api.get<RecItem[]>('/api/v1/recommend/list?limit=5');
-      setRecs(list || []);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
+    const deviceId = hasBackend ? await getDeviceId() : 'local';
+    const [daily, recommendations] = await Promise.all([
+      Api.get<{ poem: PoemDetail }>(`/api/v1/recommend/daily?device_id=${encodeURIComponent(deviceId)}`),
+      Api.get<PoemSummary[]>('/api/v1/recommend/list?limit=5').catch(() => []),
+    ]);
+    return { daily: daily.poem, recommendations };
   }, []);
-
-  useFocusEffect(useCallback(() => { load(); }, [load]));
-
-  const openDaily = () => { if (daily) router.push('/read', { id: daily.poem.id }); };
+  const { data, loading, error, retry } = useResource(load);
+  const slides = data ? [data.daily, ...data.recommendations.filter((poem) => poem.id !== data.daily.id).slice(0, 3)] : [];
+  const poem = slides[index] ?? slides[0];
+  const read = (id: string, play = false) => router.push('/read', { id, play });
 
   return (
-    <Screen backgroundColor={theme.bgRoot} safeAreaEdges={['left', 'right', 'bottom']} style={{ flex: 1 }}>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* 顶部导航行：观文 + 日期 + 搜索 */}
-        <View style={styles.navRow}>
-          <View style={styles.navLeft}>
-            <Text style={styles.navTitle}>观文</Text>
-            <Text style={styles.navDate}>{todayLabel()}</Text>
+    <Paper tab>
+      <PageHeader title="观文" caption={dateLabel()}>
+        <IconButton icon="search-outline" label="搜索" onPress={() => setSearchOpen(true)} />
+      </PageHeader>
+      <ScrollView style={p.scroll} contentContainerStyle={p.content} showsVerticalScrollIndicator={false}>
+        {loading && <ActivityIndicator color={theme.primary} style={styles.status} />}
+        {error && <Message retry={retry}>{error}</Message>}
+        {poem && <>
+          <View style={styles.hero}>
+            <Image source={art.warm} style={styles.heroPaper} />
+            <View style={styles.illustration}>
+              <Image source={index === 0 ? art.daily : poemArt(poem.title)} style={styles.illustrationImage} />
+            </View>
+            <Pressable style={styles.heroText} onPress={() => read(poem.id)} accessibilityRole="button" accessibilityLabel={`阅读${poem.title}`}>
+              <Ink style={styles.kicker}>{index === 0 ? '今日荐诗' : '为你推荐'}</Ink>
+              <Ink style={styles.poemTitle} numberOfLines={2}>{poem.title}</Ink>
+              <Ink style={p.meta}>{poem.dynasty} · {poem.author_name ?? '佚名'}</Ink>
+              {!!poem.content && <Ink style={styles.preview} numberOfLines={4}>{poem.content.split('\n').slice(0, 4).join('\n')}</Ink>}
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="播放朗读" onPress={() => read(poem.id, true)} style={styles.play}>
+              <Ionicons name="play" size={21} color="#fff9ed" />
+            </Pressable>
           </View>
-          <Pressable onPress={() => setSearchOpen(true)} style={styles.navSearch}>
-            <FontAwesome6 name="magnifying-glass" size={17} color="rgba(42,42,42,0.7)" />
+          <View style={styles.dots}>
+            {slides.map((item, i) => (
+              <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`切换到${item.title}`} accessibilityState={{ selected: i === index }}
+                onPress={() => setIndex(i)} hitSlop={4} style={styles.dotTarget}>
+                <View style={[styles.dot, i === index && styles.dotActive]} />
+              </Pressable>
+            ))}
+          </View>
+        </>}
+        <View style={styles.topics}>
+          {homeTopics.map((topic) => (
+            <Pressable key={topic.id} style={styles.topic} accessibilityRole="button" onPress={() => router.push('/explore', { topic: topic.id })}>
+              <Image source={topic.image} style={[styles.topicImage, { width: topicSize, height: topicSize }]} />
+              <Ink style={styles.topicText}>{topic.label}</Ink>
+            </Pressable>
+          ))}
+        </View>
+        <View style={styles.sectionHeading}>
+          <Ink style={p.section}>为你推荐</Ink>
+          <Pressable accessibilityRole="button" onPress={() => router.push('/explore')} hitSlop={8}>
+            <Ink style={styles.more}>探索全部 ›</Ink>
           </Pressable>
         </View>
-
-        {loading ? (
-          <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
-        ) : error ? (
-          <View style={styles.center}><Text style={styles.error}>{error}</Text></View>
-        ) : daily ? (
-          <>
-            {/* 今日荐诗卡片：左文右圆图 */}
-            <View style={styles.card}>
-              <View style={styles.cardLeft}>
-                <Text style={styles.cardKicker}>今日荐诗</Text>
-                <Text style={styles.cardTitle}>{daily.poem.title}</Text>
-                <Text style={styles.cardByline}>
-                  {daily.poem.dynasty} · {daily.poem.author_name}
-                </Text>
-                <Text style={styles.cardLines} numberOfLines={4}>
-                  {daily.poem.content.split('\n').slice(0, 4).join('\n')}
-                </Text>
+        <View style={p.card}>
+          {data?.recommendations.map((item) => (
+            <Pressable key={item.id} accessibilityRole="button" style={[p.row, p.divider, styles.recommendation]} onPress={() => read(item.id)}>
+              <Image source={poemArt(item.title)} style={styles.thumb} />
+              <View style={p.flex}>
+                <Ink numberOfLines={1} style={p.itemTitle}>{item.title}</Ink>
+                <Ink style={p.meta}>{item.author_name ?? '佚名'} · {item.dynasty}</Ink>
               </View>
-              <View style={styles.cardRight}>
-                <Image source={require('@/assets/guanwen/backgrounds/mountains_fog.png')} style={styles.cardImg} />
-                <Pressable style={styles.playBtn} onPress={openDaily}>
-                  <FontAwesome6 name="play" size={15} color="#FFFDF6" />
-                </Pressable>
-              </View>
-            </View>
-
-            {/* 分类圆形图标 */}
-            <View style={styles.catRow}>
-              {CATS.map((c) => {
-                const go = () => router.push('/library');
-                return (
-                  <Pressable key={c.label} style={styles.cat} onPress={go}>
-                    <View style={styles.catImgWrap}>
-                      <Image source={c.img} style={styles.catImg} />
-                    </View>
-                    <Text style={styles.catLabel}>{c.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {/* 为你推荐 */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>为你推荐</Text>
-              {recs.map((r, i) => (
-                <RecommendedRow key={r.id} item={r} img={REC_IMGS[Math.abs(Number(r.id) || 0) % REC_IMGS.length]} onPress={() => router.push('/read', { id: r.id })} />
-              ))}
-            </View>
-          </>
-        ) : null}
+              <Ionicons name="chevron-forward-outline" size={18} color={theme.primary} />
+            </Pressable>
+          ))}
+        </View>
       </ScrollView>
-
-      <SearchModal visible={searchOpen} onClose={() => setSearchOpen(false)} afterSearch={load} />
-    </Screen>
-  );
-}
-
-function RecommendedRow({ item, img, onPress }: { item: RecItem; img: number; onPress: () => void }) {
-  return (
-    <Pressable style={({ pressed }) => [styles.rec, pressed && styles.pressed]} onPress={onPress}>
-      <Image source={img} style={styles.recImg} />
-      <View style={styles.recBody}>
-        <Text style={styles.recTitle} numberOfLines={1}>{item.title}</Text>
-        <Text style={styles.recMeta}>{item.author_name ? `${item.author_name}·${item.dynasty}` : item.dynasty}</Text>
-      </View>
-      <FontAwesome6 name="angle-right" size={16} color="rgba(42,42,42,0.45)" />
-    </Pressable>
+      <SearchModal visible={searchOpen} onClose={() => setSearchOpen(false)} />
+    </Paper>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 20, paddingBottom: 40 },
-  center: { alignItems: 'center', paddingTop: 80 },
-  error: { color: theme.primary, fontWeight: '600' },
-
-  navRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, paddingTop: 4 },
-  navLeft: { flexDirection: 'row', alignItems: 'baseline', gap: 12 },
-  navTitle: { fontSize: 26, fontWeight: '900', color: theme.ink, letterSpacing: 1 },
-  navDate: { fontSize: 14, color: theme.muted, fontWeight: '600' },
-  navSearch: { width: 40, height: 40, borderRadius: 14, backgroundColor: theme.surface, alignItems: 'center', justifyContent: 'center' },
-
-  card: {
-    flexDirection: 'row', backgroundColor: theme.surface, borderRadius: 20,
-    padding: 20, marginTop: 14, alignItems: 'center',
-    shadowColor: '#000000', shadowOffset: { width: 0, height: 2 }, shadowRadius: 8, shadowOpacity: 0.04, elevation: 2,
-  },
-  cardLeft: { flex: 1, marginRight: 14 },
-  cardKicker: { fontSize: 14, color: theme.muted, fontWeight: '700' },
-  cardTitle: { fontSize: 22, fontWeight: '900', color: theme.ink, marginTop: 6, letterSpacing: 1 },
-  cardByline: { fontSize: 14, color: theme.muted, marginTop: 2, fontWeight: '600' },
-  cardLines: { fontSize: 16, color: theme.ink, lineHeight: 26, marginTop: 10, opacity: 0.9 },
-  cardRight: { alignItems: 'center' },
-  cardImg: { width: 104, height: 104, borderRadius: 52 },
-  playBtn: {
-    position: 'absolute', bottom: 4, right: 2, width: 36, height: 36, borderRadius: 18,
-    backgroundColor: theme.primary, alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 8, shadowOpacity: 0.2, elevation: 4,
-  },
-
-  catRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 24, paddingHorizontal: 4 },
-  cat: { alignItems: 'center', width: 64 },
-  catImgWrap: {
-    width: 56, height: 56, borderRadius: 28, backgroundColor: theme.surface, overflow: 'hidden',
-  },
-  catImg: { width: '100%', height: '100%' },
-  catLabel: { marginTop: 6, fontSize: 14, color: theme.ink, fontWeight: '700' },
-
-  section: { marginTop: 26 },
-  sectionTitle: { fontSize: 16, fontWeight: '900', color: theme.ink, marginBottom: 12 },
-  rec: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: theme.surface, borderRadius: 18,
-    padding: 12, marginBottom: 10,
-    shadowColor: '#000000', shadowOffset: { width: 0, height: 2 }, shadowRadius: 6, shadowOpacity: 0.04, elevation: 2,
-  },
-  pressed: { opacity: 0.85 },
-  recImg: { width: 48, height: 48, borderRadius: 24 },
-  recBody: { flex: 1, marginLeft: 12 },
-  recTitle: { fontSize: 16, fontWeight: '800', color: theme.ink },
-  recMeta: { fontSize: 13, color: theme.muted, marginTop: 3, fontWeight: '600' },
+  status: { marginVertical: 42 },
+  hero: { aspectRatio: 1.27, minHeight: 235, borderRadius: 18, overflow: 'hidden', backgroundColor: '#e8dcca' },
+  heroPaper: { position: 'absolute', width: '100%', height: '100%' },
+  illustration: { position: 'absolute', right: '-8%', top: '6%', width: '65%', aspectRatio: 1, borderWidth: 3, borderColor: '#fff7e7', borderRadius: 999, overflow: 'hidden' },
+  illustrationImage: { width: '100%', height: '100%' },
+  heroText: { width: '55%', minHeight: '100%', paddingHorizontal: 19, paddingVertical: 17, justifyContent: 'center' },
+  kicker: { color: '#4e553f', letterSpacing: 2, marginBottom: 11 },
+  poemTitle: { fontSize: 28, letterSpacing: 1, color: '#191e16' },
+  preview: { marginTop: 12, fontSize: 17, lineHeight: 27, letterSpacing: 1.4 },
+  play: { position: 'absolute', bottom: 9, right: 9, width: 43, height: 43, borderRadius: 23, backgroundColor: theme.primary, borderWidth: 1.5, borderColor: '#fff7e7', alignItems: 'center', justifyContent: 'center' },
+  dots: { flexDirection: 'row', justifyContent: 'center', height: 32, alignItems: 'center' },
+  dotTarget: { width: 15, height: 23, alignItems: 'center', justifyContent: 'center' },
+  dot: { width: 5, height: 5, backgroundColor: '#b7ad9b', borderRadius: 4 },
+  dotActive: { width: 7, height: 7, backgroundColor: theme.primary },
+  topics: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4, marginBottom: 21 },
+  topic: { alignItems: 'center', width: '21%', maxWidth: 80 },
+  topicImage: { borderRadius: 999, borderWidth: 1, borderColor: '#fffaef' },
+  topicText: { letterSpacing: 2, marginTop: 4 },
+  sectionHeading: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginHorizontal: 3 },
+  more: { fontSize: 15, color: theme.primaryDeep },
+  recommendation: { padding: 10, paddingHorizontal: 11 },
+  thumb: { width: 72, height: 72, borderRadius: 36 },
 });

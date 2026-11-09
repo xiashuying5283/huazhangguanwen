@@ -1,24 +1,11 @@
 import { memo } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { useSafeRouter } from '@/hooks/useSafeRouter';
 import type { PoemSummary } from '@/utils/api';
-import { pickCardBg, theme } from '@/theme';
-
-const CIRCLES = [
-  require('@/assets/guanwen/circles/misty_mountains.png'),
-  require('@/assets/guanwen/circles/sunset_river.png'),
-  require('@/assets/guanwen/circles/bamboo_grove.png'),
-  require('@/assets/guanwen/circles/lotus_pond.png'),
-  require('@/assets/guanwen/circles/plum_branch.png'),
-  require('@/assets/guanwen/circles/sailing_boats.png'),
-  require('@/assets/guanwen/circles/autumn_maples.png'),
-  require('@/assets/guanwen/circles/snowy_pines.png'),
-  require('@/assets/guanwen/circles/plum_pavilion.png'),
-  require('@/assets/guanwen/circles/golden_fields.png'),
-  require('@/assets/guanwen/circles/mountain_waterfall.png'),
-  require('@/assets/guanwen/circles/winter_village.png'),
-];
+import { theme } from '@/theme';
+import { Ink } from '@/components/Paper';
+import { poemArt } from '@/data/art';
 
 function excerpt(content: string): string {
   return (content || '').split('\n').slice(0, 2).join(' ');
@@ -26,20 +13,19 @@ function excerpt(content: string): string {
 
 export const PoemCard = memo(function PoemCard({ poem }: { poem: PoemSummary }) {
   const router = useSafeRouter();
-  const bg = pickCardBg(poem.background_hint);
-  const stamp = CIRCLES[Math.abs(Number(poem.id) || 0) % CIRCLES.length];
+  const stamp = poemArt(poem.title);
   return (
-    <Pressable onPress={() => router.push('/read', { id: poem.id })} style={({ pressed }) => [styles.card, { backgroundColor: bg }, pressed && styles.pressed]}>
+    <Pressable onPress={() => router.push('/read', { id: poem.id })} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <Image source={stamp} style={styles.thumb} />
       <View style={styles.body}>
         <View style={styles.topRow}>
-          <Text style={styles.title} numberOfLines={1}>{poem.title}</Text>
+          <Ink style={styles.title} numberOfLines={1}>{poem.title}</Ink>
           <FontAwesome6 name="angle-right" size={14} color="rgba(42,42,42,0.45)" />
         </View>
-        <Text style={styles.meta} numberOfLines={1}>
+        <Ink style={styles.meta} numberOfLines={1}>
           {poem.author_name ?? '佚名'}{poem.dynasty ? ` · ${poem.dynasty}` : ''}{poem.genre ? ` · ${poem.genre}` : ''}
-        </Text>
-        <Text style={styles.excerpt} numberOfLines={2}>{excerpt(poem.content)}</Text>
+        </Ink>
+        <Ink style={styles.excerpt} numberOfLines={2}>{excerpt(poem.content)}</Ink>
       </View>
     </Pressable>
   );
@@ -47,6 +33,7 @@ export const PoemCard = memo(function PoemCard({ poem }: { poem: PoemSummary }) 
 
 const styles = StyleSheet.create({
   card: {
+    backgroundColor: theme.surface,
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 20,
@@ -59,7 +46,7 @@ const styles = StyleSheet.create({
   thumb: { width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(53,87,67,0.10)' },
   body: { flex: 1, marginLeft: 12 },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  title: { fontSize: 16, fontWeight: '800', color: theme.ink, flex: 1 },
-  meta: { marginTop: 4, fontSize: 11, color: theme.muted, fontWeight: '700' },
+  title: { fontSize: 16, color: theme.ink, flex: 1 },
+  meta: { marginTop: 4, fontSize: 11, color: theme.muted, fontWeight: '400' },
   excerpt: { marginTop: 7, fontSize: 12.5, lineHeight: 20, color: theme.inkSoft },
 });

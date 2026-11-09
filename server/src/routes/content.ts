@@ -187,25 +187,30 @@ router.get('/poems/:id', async (req, res) => {
 // 全局搜索（人物 / 作品 / 诗文）
 router.get('/search', async (req, res) => {
   try {
-    const q = (req.query.q as string || '').trim();
+    const q = (typeof req.query.q === 'string' ? req.query.q : '').trim().slice(0, 128);
     if (!q) return res.json({ authors: [], works: [], poems: [] });
-    const kw = `%${q}%`;
+    const kw = `%${q.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+    const selectPoems = () => client
+      .from('poems')
+      .select('id, title, dynasty, genre, cover_emoji, background_hint, author_id, authors(name, avatar_emoji)');
 
-    const [authorsR, worksR, poemsR] = await Promise.all([
+    const [authorsR, worksR, titlesR] = await Promise.all([
       client.from('authors').select('id, name, dynasty, avatar_emoji').ilike('name', kw).limit(10),
       client.from('works').select('id, name, era, cover_emoji, author_id').ilike('name', kw).limit(10),
-      client
-        .from('poems')
-        .select('id, title, dynasty, genre, cover_emoji, background_hint, author_id, authors(name, avatar_emoji)')
-        .ilike('title', kw).limit(20),
+      selectPoems().ilike('title', kw).limit(20),
     ]);
     if (authorsR.error) throw new Error(authorsR.error.message);
     if (worksR.error) throw new Error(worksR.error.message);
-    if (poemsR.error) throw new Error(poemsR.error.message);
+    if (titlesR.error) throw new Error(titlesR.error.message);
+    const poems = titlesR.data || [];
+    if (Array.from(q).length >= 2 && poems.length < 20) {
+      const linesR = await selectPoems().ilike('content', kw).not('title', 'ilike', kw).limit(20 - poems.length);
+      if (!linesR.error) poems.push(...(linesR.data || []));
+    }
     res.json({
       authors: authorsR.data || [],
       works: worksR.data || [],
-      poems: (poemsR.data || []).map((p: any) => ({
+      poems: poems.map((p: any) => ({
         ...p, author_name: p.authors?.name, author_emoji: p.authors?.avatar_emoji,
       })),
     });

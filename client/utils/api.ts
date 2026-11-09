@@ -1,8 +1,13 @@
+import { getLocalContent } from '@/data/localContent';
+
 /**
  * 后端 API 基础地址
  * - 运行时由平台注入 EXPO_PUBLIC_BACKEND_BASE_URL
  */
 export const API_BASE = (process.env.EXPO_PUBLIC_BACKEND_BASE_URL ?? '').replace(/\/$/, '');
+
+// Coze and deployments use the original API by default. Only local previews opt in to selected readings.
+export const hasBackend = !!API_BASE || process.env.EXPO_PUBLIC_USE_LOCAL_CONTENT !== '1';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -22,10 +27,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export const Api = {
   get<T>(path: string): Promise<T> {
-    return request<T>(path);
+    return hasBackend ? request<T>(path) : Promise.resolve().then(() => getLocalContent(path) as T);
   },
   post<T>(path: string, body?: unknown): Promise<T> {
-    return request<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}) });
+    return hasBackend ? request<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}) }) : Promise.resolve(undefined as T);
   },
 };
 
@@ -36,7 +41,7 @@ export interface AuthorSummary {
 
 export interface WorkSummary {
   id: string; name: string; era?: string | null; description?: string | null;
-  cover_emoji?: string | null; author_name?: string | null; poem_count?: number;
+  cover_emoji?: string | null; author_id?: string | null; author_name?: string | null; poem_count?: number;
 }
 
 export interface Paged<T> { list: T[]; page: number; pageSize: number; total: number; totalPages: number; }
@@ -57,6 +62,7 @@ export interface PoemDetail extends PoemSummary {
   translation?: string | null;
   appreciation?: string | null;
   read_count?: number;
+  creation_background?: string | null;
 }
 
 export interface Relationship {

@@ -25,11 +25,11 @@
   :root {
     @variant light {
       /* Base Colors */
-      --background: #fafafa;
-      --foreground: var(--eclipse);
+      --background: #f4ede2;
+      --foreground: #242923;
 
       /* Surface: Used for non-overlay components (cards, accordions, disclosure groups) */
-      --surface: var(--white);
+      --surface: #f8f3e9;
       --surface-foreground: var(--foreground);
 
       /* Overlay: Used for floating/overlay components (dialogs, popovers, modals, menus) */
@@ -41,7 +41,7 @@
       --default: oklch(94% 0.001 286.375);
       --default-foreground: var(--eclipse);
 
-      --accent: oklch(0.6204 0.195 253.83);
+      --accent: #626b4d;
       --accent-foreground: var(--snow);
 
       /* Form Fields */

@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Image, Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { useSafeRouter } from '@/hooks/useSafeRouter';
-import { Api, type AuthorSummary, type PoemSummary, type WorkSummary } from '@/utils/api';
+import { Api, hasBackend, type AuthorSummary, type PoemSummary, type WorkSummary } from '@/utils/api';
 import { getDeviceId } from '@/utils/device';
 import { theme } from '@/theme';
+import { Avatar, BookCover, Ink } from '@/components/Paper';
+import { poemArt } from '@/data/art';
 
 interface SearchResult {
   authors: AuthorSummary[];
@@ -17,13 +19,13 @@ interface SearchResult {
 interface Props {
   visible: boolean;
   onClose: () => void;
-  afterSearch?: () => void;
 }
 
-export function SearchModal({ visible, onClose, afterSearch }: Props) {
+export function SearchModal({ visible, onClose }: Props) {
   const router = useSafeRouter();
   const [kw, setKw] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
   const [result, setResult] = useState<SearchResult | null>(null);
 
   useEffect(() => {
@@ -31,11 +33,14 @@ export function SearchModal({ visible, onClose, afterSearch }: Props) {
     const t = setTimeout(() => {
       setKw('');
       setResult(null);
+      setError(false);
     }, 0);
     return () => clearTimeout(t);
   }, [visible]);
 
   useEffect(() => {
+    if (!visible) return;
+    let active = true;
     const t = setTimeout(async () => {
       const q = kw.trim();
       if (!q) {
@@ -44,36 +49,34 @@ export function SearchModal({ visible, onClose, afterSearch }: Props) {
         return;
       }
       setLoading(true);
+      setError(false);
       // 服务端文件：server/src/routes/content.ts
       // 接口：GET /api/v1/search ；Query 参数：q: string
       try {
         const data = await Api.get<SearchResult>(`/api/v1/search?q=${encodeURIComponent(q)}`);
-        setResult(data);
+        if (active) setResult(data);
       } catch {
-        setResult(null);
+        if (active) { setResult(null); setError(true); }
       }
-      setLoading(false);
+      if (active) setLoading(false);
     }, 350);
-    return () => clearTimeout(t);
+    return () => { active = false; clearTimeout(t); };
   }, [kw, visible]);
 
-  const openPoem = async (p: PoemSummary) => {
-    const deviceId = await getDeviceId();
-    // 服务端文件：server/src/routes/content.ts
-    // 接口：POST /api/v1/history ；Body 参数：device_id: string, poem_id: string, action?: 'read'|'search'
-    Api.post('/api/v1/history', { device_id: deviceId, poem_id: p.id, action: 'search' }).catch(() => undefined);
+  const openPoem = (p: PoemSummary) => {
+    if (hasBackend) void getDeviceId().then((deviceId) => Api.post('/api/v1/history', { device_id: deviceId, poem_id: p.id, action: 'search' })).catch(() => undefined);
     router.push('/read', { id: p.id });
-    onClose(); afterSearch?.();
+    onClose();
   };
 
   const openAuthor = (a: AuthorSummary) => {
     router.push('/poet-detail', { id: a.id });
-    onClose(); afterSearch?.();
+    onClose();
   };
 
   const openWork = (w: WorkSummary) => {
-    router.push('/library', { work: w.id });
-    onClose(); afterSearch?.();
+    router.push('/work-detail', { id: w.id });
+    onClose();
   };
 
   return (
@@ -98,15 +101,17 @@ export function SearchModal({ visible, onClose, afterSearch }: Props) {
 
           {loading ? (
             <ActivityIndicator color={theme.primary} style={{ marginTop: 40 }} />
+          ) : error && kw.trim() ? (
+            <Ink style={styles.empty}>搜索暂时不可用，请稍后再试</Ink>
           ) : result && (result.authors.length || result.works.length || result.poems.length) ? (
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               {result.authors.length > 0 ? (
                 <ResultGroup title="诗人">
                   {result.authors.map((a) => (
                     <Pressable key={a.id} style={styles.row} onPress={() => openAuthor(a)}>
-                      <Text style={styles.rowIcon}>{a.avatar_emoji ?? ''}</Text>
+                      <Avatar name={a.name} size={42} />
                       <View style={styles.rowInfo}>
-                        <Text style={styles.rowTitle} numberOfLines={1}>{a.name}</Text>
+                        <Ink style={styles.rowTitle} numberOfLines={1}>{a.name}</Ink>
                         <Text style={styles.rowMeta} numberOfLines={1}>{a.dynasty}</Text>
                       </View>
                       <Text style={styles.chevron}>›</Text>
@@ -118,9 +123,9 @@ export function SearchModal({ visible, onClose, afterSearch }: Props) {
                 <ResultGroup title="作品集">
                   {result.works.map((w) => (
                     <Pressable key={w.id} style={styles.row} onPress={() => openWork(w)}>
-                      <Text style={styles.rowIcon}>{w.cover_emoji ?? ''}</Text>
+                      <BookCover name={w.name} width={32} height={42} />
                       <View style={styles.rowInfo}>
-                        <Text style={styles.rowTitle} numberOfLines={1}>{w.name}</Text>
+                        <Ink style={styles.rowTitle} numberOfLines={1}>{w.name}</Ink>
                         <Text style={styles.rowMeta} numberOfLines={1}>{w.era ?? ''}</Text>
                       </View>
                       <Text style={styles.chevron}>›</Text>
@@ -132,9 +137,9 @@ export function SearchModal({ visible, onClose, afterSearch }: Props) {
                 <ResultGroup title="诗文">
                   {result.poems.map((p) => (
                     <Pressable key={p.id} style={styles.row} onPress={() => openPoem(p)}>
-                      <Text style={styles.rowIcon}>{p.cover_emoji ?? ''}</Text>
+                      <Image source={poemArt(p.title)} style={{ width: 42, height: 42, borderRadius: 21 }} />
                       <View style={styles.rowInfo}>
-                        <Text style={styles.rowTitle} numberOfLines={1}>{p.title}</Text>
+                        <Ink style={styles.rowTitle} numberOfLines={1}>{p.title}</Ink>
                         <Text style={styles.rowMeta} numberOfLines={1}>{p.author_name ?? ''}</Text>
                       </View>
                       <Text style={styles.chevron}>›</Text>
@@ -170,8 +175,6 @@ const styles = StyleSheet.create({
   group: { marginTop: 16 },
   sectionTitle: { fontSize: 12, fontWeight: '800', color: theme.primaryDeep, marginBottom: 6, letterSpacing: 1 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: theme.line },
-  pressed: { opacity: 0.7 },
-  rowIcon: { fontSize: 22, width: 26, textAlign: 'center' },
   rowInfo: { flex: 1 },
   rowTitle: { fontSize: 15, fontWeight: '700', color: theme.ink },
   rowMeta: { fontSize: 12, color: theme.muted, marginTop: 1 },

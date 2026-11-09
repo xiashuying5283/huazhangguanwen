@@ -1,30 +1,22 @@
 import { memo } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { useSafeRouter } from '@/hooks/useSafeRouter';
 import type { AuthorSummary } from '@/utils/api';
 import { theme } from '@/theme';
-
-const CIRCLES = [
-  require('@/assets/guanwen/circles/misty_mountains.png'),
-  require('@/assets/guanwen/circles/plum_pavilion.png'),
-  require('@/assets/guanwen/circles/autumn_maples.png'),
-  require('@/assets/guanwen/circles/bamboo_grove.png'),
-  require('@/assets/guanwen/circles/sailing_boats.png'),
-];
+import { Avatar, Ink } from '@/components/Paper';
 
 export const AuthorCard = memo(function AuthorCard({ author }: { author: AuthorSummary }) {
   const router = useSafeRouter();
-  const stamp = CIRCLES[Math.abs(Number(author.id) || author.name.length) % CIRCLES.length];
   return (
     <Pressable onPress={() => router.push('/poet-detail', { id: author.id })} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
-      <Image source={stamp} style={styles.thumb} />
+      <Avatar name={author.name} size={54} />
       <View style={styles.info}>
-        <Text style={styles.name} numberOfLines={1}>{author.name}</Text>
-        <Text style={styles.meta} numberOfLines={1}>{author.dynasty}</Text>
-        <Text style={styles.bio} numberOfLines={1}>{author.bio ?? '暂无简介'}</Text>
+        <Ink style={styles.name} numberOfLines={1}>{author.name}</Ink>
+        <Ink style={styles.meta} numberOfLines={1}>{author.dynasty}</Ink>
+        <Ink style={styles.bio} numberOfLines={1}>{author.bio ?? '暂无简介'}</Ink>
       </View>
-      <View style={styles.countPill}><Text style={styles.countTxt}>{author.poem_count ?? 0} 首</Text></View>
+      <View style={styles.countPill}><Ink style={styles.countTxt}>{author.poem_count ?? 0} 首</Ink></View>
       <FontAwesome6 name="angle-right" size={14} color={theme.muted} />
     </Pressable>
   );

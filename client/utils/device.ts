@@ -1,25 +1,25 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 
-let cached: string | null = null;
+let deviceId: Promise<string> | undefined;
 
 /**
  * 获取全局一致的设备 ID（UUID）。
  * 首次生成后持久化到 AsyncStorage，多端一致，用于推荐个性化。
  */
-export async function getDeviceId(): Promise<string> {
-  if (cached) return cached;
+export function getDeviceId(): Promise<string> {
+  deviceId ??= loadDeviceId();
+  return deviceId;
+}
+
+async function loadDeviceId(): Promise<string> {
   try {
     const existing = await AsyncStorage.getItem('poetry_device_id');
-    if (existing) {
-      cached = existing;
-      return existing;
-    }
+    if (existing) return existing;
   } catch { /* ignore */ }
   const id = Crypto.randomUUID();
   try {
     await AsyncStorage.setItem('poetry_device_id', id);
   } catch { /* ignore */ }
-  cached = id;
   return id;
 }

@@ -1,184 +1,136 @@
-import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { FontAwesome6 } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Ink, Message, Paper, Segments, type IconName, paperStyles as p } from '@/components/Paper';
+import { DialogRow, PaperDialog } from '@/components/PaperDialog';
+import { Welcome } from '@/components/Welcome';
+import { setPreferences, useReadingShelf } from '@/contexts/ReadingShelf';
+import { art } from '@/data/art';
+import { useResource } from '@/hooks/useResource';
 import { useSafeRouter } from '@/hooks/useSafeRouter';
-import { Screen } from '@/components/Screen';
-import { Api } from '@/utils/api';
+import { Api, hasBackend } from '@/utils/api';
 import { getDeviceId } from '@/utils/device';
+import { shareText } from '@/utils/share';
 import { theme } from '@/theme';
 
-interface HistoryItem {
-  id: string; poem_id: string; title: string; dynasty?: string | null; genre?: string | null;
-  work_id?: string | null; work_name?: string | null;
-  author_id?: string | null; author_name: string; created_at?: string;
-}
+const settings = [
+  ['阅读设置', 'settings-outline'],
+  ['字体与排版', 'text-outline'],
+  ['主题与背景', 'color-palette-outline'],
+  ['数据与同步', 'sync-circle-outline'],
+] as const satisfies ReadonlyArray<readonly [string, IconName]>;
 
-interface HistoryResp {
+const sizes = { 小字: 20, 中字: 23, 大字: 28 };
+type FontLabel = keyof typeof sizes;
+type Panel = typeof settings[number][0] | '读诗笔记' | '最近读过';
+
+type History = {
   total: number; read_count: number; author_count: number;
-  page: number; pageSize: number; totalPages: number; list: HistoryItem[];
-}
-
-const genIcon = (genre?: string | null): keyof typeof FontAwesome6.glyphMap => {
-  switch (genre) {
-    case '词': return 'leaf';
-    case '曲': return 'music';
-    case '文': return 'scroll';
-    case '骚体': return 'water';
-    case '诗': return 'feather';
-    default: return 'book';
-  }
+  list: { poem_id: string; title: string; author_name?: string; dynasty?: string }[];
 };
 
 export default function ProfileScreen() {
   const router = useSafeRouter();
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [readTotal, setReadTotal] = useState(0);
-  const [readCount, setReadCount] = useState(0);
-  const [authorCount, setAuthorCount] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const shelf = useReadingShelf();
+  const { preferences, favorites, notes, history, readingDays } = shelf.data;
+  const [panel, setPanel] = useState<Panel>();
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [notice, setNotice] = useState('');
+  const loadHistory = useCallback(async () => {
+    if (!hasBackend || (panel !== '数据与同步' && panel !== '最近读过')) return undefined;
+    const deviceId = await getDeviceId();
+    return Api.get<History>(`/api/v1/history?device_id=${encodeURIComponent(deviceId)}&limit=30`);
+  }, [panel]);
+  const remote = useResource(loadHistory);
+  const readings = new Map(history.map((poem) => [poem.id, poem]));
+  const recent = [...history, ...(remote.data?.list ?? []).filter((poem) => !readings.has(poem.poem_id) && poem.title).map((poem) => ({ ...poem, id: poem.poem_id }))];
+  const selectPanel = (value?: Panel) => { setNotice(''); setPanel(value); };
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const deviceId = await getDeviceId();
-      const data = await Api.get<HistoryResp>(`/api/v1/history?device_id=${encodeURIComponent(deviceId)}&limit=30`);
-      setHistory(data.list);
-      setReadTotal(data.total);
-      setReadCount(data.read_count);
-      setAuthorCount(data.author_count);
-    } catch {
-      setHistory([]);
-    }
-    setLoading(false);
-  }, []);
-
-  useFocusEffect(useCallback(() => { load(); }, [load]));
-
-  const recent = useMemo(() => history.slice(0, 4), [history]);
+  if (showWelcome) return <Welcome onClose={() => setShowWelcome(false)} />;
 
   return (
-    <Screen backgroundColor={theme.bgRoot} safeAreaEdges={['left', 'right', 'bottom']} style={{ flex: 1 }}>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Image source={require('@/assets/guanwen/decorations/pink_plum_branch.png')} style={styles.topBranch} />
-        <View style={styles.header}>
-          <Text style={styles.title}>我的书斋</Text>
-          <Text style={styles.subtitle}>藏诗、阅卷、记人、修心</Text>
-        </View>
-
-        <View style={styles.heroCard}>
-          <View style={styles.avatarRing}>
-            <Image source={require('@/assets/guanwen/circles/misty_mountains.png')} style={styles.avatar} />
-          </View>
-          <Text style={styles.nickname}>观文书客</Text>
-          <Text style={styles.bio}>把一日烟火，读成半卷清诗。</Text>
-
-          <View style={styles.statsRow}>
-            <Stat value={readTotal} label="读过篇数" />
-            <Stat value={authorCount} label="涉猎作者" />
-            <Stat value={readCount} label="阅读次数" />
+    <Paper tab scene="blossom">
+      <ScrollView style={p.scroll} contentContainerStyle={p.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.hero}>
+          <Image source={art.mist} style={styles.avatar} />
+          <Ink accessibilityRole="header" style={styles.name}>观文书客</Ink>
+          <View style={styles.stats}>
+            <Stat value={favorites.length} label="收藏" onPress={() => router.push('/profile/favorites')} />
+            <Stat value={notes.length} label="笔记" onPress={() => selectPanel('读诗笔记')} />
+            <Stat value={readingDays.length} label="阅读天数" last onPress={() => selectPanel('最近读过')} />
           </View>
         </View>
-
-        <View style={styles.sectionRow}>
-          <Text style={styles.sectionTitle}>最近读过</Text>
-          {history.length > 0 ? <Text style={styles.sectionMeta}>共 {readTotal} 篇</Text> : null}
-        </View>
-
-        {loading ? (
-          <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
-        ) : recent.length ? (
-          <View style={styles.blockCard}>
-            {recent.map((h, idx) => (
-              <Pressable
-                key={h.id}
-                style={[styles.historyRow, idx === recent.length - 1 && styles.historyLastRow]}
-                onPress={() => router.push('/read', { id: h.poem_id })}
-              >
-                <Image source={require('@/assets/guanwen/circles/misty_mountains.png')} style={styles.historyCircle} />
-                <View style={{ flex: 1, marginHorizontal: 12 }}>
-                  <Text style={styles.historyTitle} numberOfLines={1}>{h.title}</Text>
-                  <Text style={styles.historyMeta} numberOfLines={1}>{h.author_name}{h.dynasty ? ` · ${h.dynasty}` : ''}</Text>
-                </View>
-                <Pressable hitSlop={6}>
-                  <FontAwesome6 name="heart" size={16} color={idx < 2 ? theme.cinnabar : '#B7B2A5'} />
-                </Pressable>
-              </Pressable>
-            ))}
-          </View>
-        ) : (
-          <View style={styles.emptyCard}>
-            <FontAwesome6 name="mug-hot" size={24} color={theme.muted} />
-            <Text style={styles.emptyTxt}>还没有阅读记录，去首页读一首诗吧。</Text>
-          </View>
-        )}
-
-        <View style={styles.settingsCard}>
-          {[
-            ['阅读设置', 'sliders'],
-            ['字体与排版', 'text-height'],
-            ['主题与背景', 'palette'],
-            ['数据与同步', 'database'],
-          ].map(([label, icon], idx) => (
-            <Pressable key={label} style={[styles.settingRow, idx === 3 && styles.settingLastRow]}>
-              <View style={styles.settingIconWrap}>
-                <FontAwesome6 name={icon as keyof typeof FontAwesome6.glyphMap} size={14} color={theme.primaryDeep} />
-              </View>
-              <Text style={styles.settingLabel}>{label}</Text>
-              <Text style={styles.settingArrow}>›</Text>
+        <View style={[p.card, styles.settings]}>
+          {settings.map(([label, icon]) => (
+            <Pressable key={label} accessibilityRole="button" accessibilityLabel={label} onPress={() => selectPanel(label)} style={[p.row, p.divider, styles.setting]}>
+              <Ionicons name={icon} size={23} color={theme.primaryDeep} />
+              <Ink style={p.flex}>{label}</Ink>
+              <Ionicons name="chevron-forward-outline" size={16} color={theme.primary} />
             </Pressable>
           ))}
         </View>
+        {shelf.storageError && <Message>当前无法读取或保存本机数据</Message>}
       </ScrollView>
-    </Screen>
+      {panel && <PaperDialog title={panel} onClose={() => selectPanel()}>
+        {panel === '阅读设置' && <>
+          <DialogRow onPress={() => setPreferences({ pinyin: !preferences.pinyin })}>{preferences.pinyin ? '关闭拼音标注' : '开启拼音标注'}</DialogRow>
+          <DialogRow onPress={() => setPreferences({ traditional: !preferences.traditional })}>{preferences.traditional ? '切换简体正文' : '切换繁體正文'}</DialogRow>
+        </>}
+        {panel === '字体与排版' && <>
+          <Segments options={Object.keys(sizes) as FontLabel[]} value={(Object.keys(sizes) as FontLabel[]).find((name) => sizes[name] === preferences.fontSize) ?? '中字'}
+            onChange={(name) => setPreferences({ fontSize: sizes[name] })} />
+          <Ink style={[styles.sample, { fontSize: preferences.fontSize }]}>明月松间照，清泉石上流。</Ink>
+        </>}
+        {panel === '主题与背景' && <>
+          <Segments options={['宣纸', '暖笺']} value={preferences.paper} onChange={(paper) => setPreferences({ paper })} />
+          <View style={[styles.sampleBox, preferences.paper === '暖笺' && styles.warm]}><Ink style={styles.sample}>松风入纸，展卷读诗。</Ink></View>
+        </>}
+        {panel === '数据与同步' && <>
+          <Ink style={[p.meta, styles.info]}>{hasBackend ? '阅读记录通过当前设备编号与文库同步。收藏、笔记和设置保存在此设备。' : '当前使用内置选篇。收藏、笔记、设置与阅读记录保存在此设备。'}</Ink>
+          {hasBackend && <DialogRow onPress={remote.retry}>{remote.loading ? '正在读取同步记录…' : `刷新同步记录 · ${remote.data?.read_count ?? 0} 次阅读`}</DialogRow>}
+          {remote.error && <Message retry={remote.retry}>{remote.error}</Message>}
+          <DialogRow onPress={async () => {
+            try { setNotice(await shareText('观文书斋备份', JSON.stringify({ favorites, notes, preferences, history, readingDays }, null, 2)) ?? ''); }
+            catch (error) { if ((error as Error).name !== 'AbortError') setNotice('当前无法导出'); }
+          }}>导出本机数据</DialogRow>
+          <DialogRow onPress={() => { selectPanel(); setShowWelcome(true); }}>查看观文扉页</DialogRow>
+          {!!notice && <Message>{notice}</Message>}
+        </>}
+        {panel === '读诗笔记' && <>
+          {notes.length === 0 && <Message>在精读页的阅读菜单中写下第一篇笔记</Message>}
+          {notes.map(({ poem, text }) => <DialogRow key={poem.id} onPress={() => { selectPanel(); router.push('/read', { id: poem.id }); }}>{poem.title}{'\n'}{text.slice(0, 120)}</DialogRow>)}
+        </>}
+        {panel === '最近读过' && <>
+          {recent.length === 0 && <Message>{remote.loading ? '正在载入阅读记录…' : '还没有阅读记录'}</Message>}
+          {remote.error && <Message retry={remote.retry}>{remote.error}</Message>}
+          {recent.map((poem) => <DialogRow key={poem.id} onPress={() => { selectPanel(); router.push('/read', { id: poem.id }); }}>{poem.title} · {poem.author_name ?? '佚名'}</DialogRow>)}
+        </>}
+      </PaperDialog>}
+    </Paper>
   );
 }
 
-function Stat({ value, label }: { value: number; label: string }) {
+function Stat({ value, label, onPress, last }: { value: number; label: string; onPress: () => void; last?: boolean }) {
   return (
-    <View style={styles.statCol}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={[styles.stat, last && styles.lastStat]}>
+      <Ink style={styles.statNumber}>{value}</Ink><Ink style={styles.statLabel}>{label}</Ink>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 20, paddingBottom: 40 },
-  topBranch: { position: 'absolute', top: 0, right: 0, width: 140, height: 100, opacity: 0.95 },
-  header: { paddingTop: 8 },
-  title: { fontSize: 28, fontWeight: '900', color: theme.ink },
-  subtitle: { fontSize: 12, color: theme.muted, marginTop: 6 },
-
-  heroCard: { alignItems: 'center', marginTop: 20, paddingVertical: 20, paddingHorizontal: 18, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.34)' },
-  avatarRing: { width: 102, height: 102, borderRadius: 51, padding: 7, backgroundColor: 'rgba(255,255,255,0.7)' },
-  avatar: { width: '100%', height: '100%', borderRadius: 999 },
-  nickname: { fontSize: 22, fontWeight: '900', color: theme.ink, marginTop: 14 },
-  bio: { fontSize: 13, color: theme.inkSoft, marginTop: 8 },
-  statsRow: { flexDirection: 'row', justifyContent: 'space-around', width: '100%', marginTop: 24 },
-  statCol: { alignItems: 'center', minWidth: 72 },
-  statValue: { fontSize: 28, fontWeight: '900', color: theme.ink },
-  statLabel: { fontSize: 11, color: theme.muted, marginTop: 4 },
-
-  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 24, marginBottom: 12 },
-  sectionTitle: { fontSize: 18, fontWeight: '900', color: theme.ink },
-  sectionMeta: { fontSize: 12, color: theme.muted, fontWeight: '700' },
-  center: { alignItems: 'center', paddingTop: 40 },
-
-  blockCard: { backgroundColor: theme.surface, borderRadius: 22, overflow: 'hidden', borderWidth: 1, borderColor: theme.line },
-  historyRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.line },
-  historyLastRow: { borderBottomWidth: 0 },
-  historyCircle: { width: 52, height: 52, borderRadius: 26 },
-  historyTitle: { fontSize: 16, fontWeight: '800', color: theme.ink },
-  historyMeta: { fontSize: 12, color: theme.muted, marginTop: 4 },
-
-  emptyCard: { backgroundColor: theme.surface, borderRadius: 18, padding: 24, alignItems: 'center', gap: 12 },
-  emptyTxt: { fontSize: 13, color: theme.muted, marginTop: 12 },
-
-  settingsCard: { backgroundColor: theme.surface, borderRadius: 22, marginTop: 20, overflow: 'hidden', borderWidth: 1, borderColor: theme.line },
-  settingRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 15, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.line },
-  settingLastRow: { borderBottomWidth: 0 },
-  settingIconWrap: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#EEE8DA', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  settingLabel: { flex: 1, fontSize: 14, color: theme.ink, fontWeight: '700' },
-  settingArrow: { fontSize: 18, color: theme.muted },
+  hero: { alignItems: 'center', marginTop: 88, marginBottom: 21 },
+  avatar: { width: 89, height: 89, borderRadius: 45, borderColor: '#fffaf1', borderWidth: 2 },
+  name: { fontSize: 24, letterSpacing: 2, marginTop: 12 },
+  stats: { flexDirection: 'row', alignItems: 'center', marginTop: 23, width: '90%' },
+  stat: { flex: 1, alignItems: 'center', gap: 2, minHeight: 47, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: theme.line },
+  lastStat: { borderRightWidth: 0 },
+  statNumber: { fontSize: 24 },
+  statLabel: { fontSize: 15, color: theme.inkSoft },
+  settings: { paddingHorizontal: 17 },
+  setting: { minHeight: 54, gap: 17 },
+  sample: { textAlign: 'center', paddingVertical: 16 },
+  sampleBox: { borderRadius: 10, marginTop: 12, backgroundColor: '#f5efe6' },
+  warm: { backgroundColor: '#e9dfcc' },
+  info: { marginBottom: 10, lineHeight: 24 },
 });
