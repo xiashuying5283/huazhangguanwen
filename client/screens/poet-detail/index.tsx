@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { TabView, TabBar } from 'react-native-tab-view';
@@ -17,6 +17,8 @@ export default function PoetDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [index, setIndex] = useState(0);
+  const [bioState, setBioState] = useState<'idle' | 'generating' | 'done'>('idle');
+  const bioDoneFor = useRef<Set<string>>(new Set());
 
   const routes = [
     { key: 'bio', title: '生平' },
@@ -39,9 +41,28 @@ export default function PoetDetailScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  // 缺少生平时自动用大模型生成，并回写数据库
+  useEffect(() => {
+    if (!author) return;
+    if (author.bio && author.bio.trim()) { setBioState('done'); return; }
+    if (bioDoneFor.current.has(author.id)) { setBioState('done'); return; }
+    bioDoneFor.current.add(author.id);
+    setBioState('generating');
+    (async () => {
+      try {
+        // 服务端文件：server/src/routes/ai.ts
+        // 接口：POST /api/v1/ai/bio ；Body 参数：author_id: string
+        await Api.post('/api/v1/ai/bio', { author_id: author.id });
+      } catch { /* 生成失败不阻塞 */ }
+      await load();
+      setBioState('done');
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [author?.id]);
+
   const renderScene = ({ route }: { route: { key: string } }) => {
     if (!author) return <View />;
-    if (route.key === 'bio') return <BioTab author={author} />;
+    if (route.key === 'bio') return <BioTab author={author} bioState={bioState} />;
     if (route.key === 'works') return <WorksTab author={author} />;
     if (route.key === 'rel') return <RelTab author={author} />;
     return <PoemsTab author={author} />;
@@ -113,12 +134,22 @@ function Stat({ label, value }: { label: string; value: number }) {
   );
 }
 
-function BioTab({ author }: { author: AuthorDetail }) {
+function BioTab({ author, bioState }: { author: AuthorDetail; bioState: 'idle' | 'generating' | 'done' }) {
+  const hasBio = !!(author.bio && author.bio.trim());
   return (
     <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>生平简介</Text>
-        <Text style={styles.bioText}>{author.bio || '暂无生平介绍'}</Text>
+        {hasBio ? (
+          <Text style={styles.bioText}>{author.bio}</Text>
+        ) : bioState === 'generating' ? (
+          <View style={styles.genRow}>
+            <ActivityIndicator color={theme.primary} />
+            <Text style={styles.genTxt}>正在生成生平介绍…</Text>
+          </View>
+        ) : (
+          <Text style={styles.bioText}>暂无生平介绍</Text>
+        )}
       </View>
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>朝代</Text>
@@ -212,6 +243,8 @@ const styles = StyleSheet.create({
   sectionCard: { backgroundColor: theme.surface, borderRadius: 22, padding: 18, marginBottom: 14, shadowColor: theme.shadowSoft, shadowOffset: { width: 0, height: 5 }, shadowRadius: 12, shadowOpacity: 1, elevation: 3 },
   sectionTitle: { fontSize: 14, fontWeight: '800', color: theme.primaryDeep, marginBottom: 10 },
   bioText: { fontSize: 15, lineHeight: 26, color: theme.ink },
+  genRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
+  genTxt: { fontSize: 13, color: theme.muted, fontWeight: '600' },
   workCard: { flexDirection: 'row', gap: 12, backgroundColor: theme.surface, borderRadius: 20, padding: 16, marginBottom: 12, shadowColor: theme.shadowSoft, shadowOffset: { width: 0, height: 5 }, shadowRadius: 12, shadowOpacity: 1, elevation: 3 },
   workEmoji: { fontSize: 28 },
   workName: { fontSize: 16, fontWeight: '800', color: theme.ink },

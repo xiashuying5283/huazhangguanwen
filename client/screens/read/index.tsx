@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSafeRouter, useSafeSearchParams } from '@/hooks/useSafeRouter';
@@ -19,6 +19,8 @@ export default function ReadScreen() {
   const [tab, setTab] = useState<TabKey>('annotation');
   const [traditional, setTraditional] = useState(false);
   const [showPinyin, setShowPinyin] = useState(true);
+  const [genState, setGenState] = useState<'idle' | 'generating' | 'done'>('idle');
+  const genDoneFor = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!id) return;
@@ -47,6 +49,28 @@ export default function ReadScreen() {
     })();
     return () => { cancelled = true; };
   }, [id]);
+
+  // 注解/翻译/赏析缺失时，自动调用大模型生成并缓存
+  useEffect(() => {
+    if (!poem || genState === 'generating') return;
+    const hasAll = !!(poem.annotation && poem.translation && poem.appreciation);
+    if (hasAll || genDoneFor.current.has(poem.id)) { setGenState('done'); return; }
+    genDoneFor.current.add(poem.id);
+    setGenState('generating');
+    (async () => {
+      try {
+        await Api.post('/api/v1/ai/analysis', { poem_id: poem.id });
+      } catch (e) {
+        console.warn('ai/analysis failed', e);
+      }
+      try {
+        const d: any = await Api.get(`/api/v1/poems/${poem.id}`);
+        if (d) setPoem(d);
+      } catch { /* 忽略刷新失败 */ }
+      setGenState('done');
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [poem?.id]);
 
   const tabs: { key: TabKey; title: string }[] = [
     { key: 'annotation', title: '注解' },
@@ -108,9 +132,9 @@ export default function ReadScreen() {
               </View>
 
               <View style={styles.detailCard}>
-                {tab === 'annotation' && <Section label="注解" text={poem.annotation ?? '暂无注解'} />}
-                {tab === 'translate' && <Section label="现代翻译" text={poem.translation ?? '暂无译文'} />}
-                {tab === 'appreciate' && <Section label="赏析" text={poem.appreciation ?? '暂无赏析'} />}
+                {tab === 'annotation' && <Section label="注解" text={poem.annotation ?? ''} generating={genState === 'generating' && !poem.annotation} />}
+                {tab === 'translate' && <Section label="现代翻译" text={poem.translation ?? ''} generating={genState === 'generating' && !poem.translation} />}
+                {tab === 'appreciate' && <Section label="赏析" text={poem.appreciation ?? ''} generating={genState === 'generating' && !poem.appreciation} />}
               </View>
             </ScrollView>
           </View>
@@ -146,11 +170,19 @@ function PoemBody({ content, pinyin }: { content: string; pinyin?: PinyinChar[][
   );
 }
 
-function Section({ label, text }: { label: string; text: string }) {
+function Section({ label, text, generating }: { label: string; text: string; generating?: boolean }) {
+  let content: string;
+  if (generating) {
+    content = '正在用大模型生成中，请稍候…';
+  } else if (text) {
+    content = text;
+  } else {
+    content = '暂无' + label + '，可下拉或稍后重试。';
+  }
   return (
     <View>
-      <Text style={styles.sectionLabel}>{label}</Text>
-      <Text style={styles.sectionText}>{text}</Text>
+      <Text style={styles.sectionLabel}>{label}{generating ? '（生成中…）' : ''}</Text>
+      <Text style={styles.sectionText}>{content}</Text>
     </View>
   );
 }

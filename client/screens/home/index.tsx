@@ -46,7 +46,7 @@ export default function HomeScreen() {
   return (
     <Screen backgroundColor={theme.bgRoot} safeAreaEdges={['left', 'right', 'bottom']} style={{ flex: 1 }}>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <AppHeader title="今日荐诗" icon="peach" subtitle="读一首刚刚好的诗词" onSearch={() => setSearchOpen(true)} />
+        <AppHeader title="今日荐诗" icon="leaf" subtitle="读一首刚刚好的诗词" onSearch={() => setSearchOpen(true)} />
 
         {loading ? (
           <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
