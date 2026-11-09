@@ -260,6 +260,57 @@ router.post('/search-log', async (req, res) => {
   }
 });
 
+// 阅读历史 & 统计（按时间倒序去重）
+router.get('/history', async (req, res) => {
+  try {
+    const device_id = (req.query.device_id as string || '').trim();
+    if (!device_id) return res.status(400).json({ error: '缺少 device_id' });
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 60);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+
+    let all: any[] = [];
+    let start = 0;
+    for (;;) {
+      const { data, error } = await client
+        .from('reading_logs')
+        .select('id, created_at, poem_id, author_id, authors(name), poems(id, title, dynasty, genre, work_id, works(name))')
+        .eq('device_id', device_id)
+        .eq('action', 'read')
+        .order('created_at', { ascending: false })
+        .range(start, start + 999);
+      if (error) throw new Error(error.message);
+      const rows = data || [];
+      all = all.concat(rows);
+      if (rows.length < 1000) break;
+      start += 1000;
+    }
+
+    const seen = new Set<string>();
+    const deduped: any[] = [];
+    const authorSet = new Set<string>();
+    let read_count = 0;
+    for (const l of all) {
+      read_count++;
+      if (l.author_id) authorSet.add(l.author_id);
+      if (l.poem_id && !seen.has(l.poem_id)) { seen.add(l.poem_id); deduped.push(l); }
+    }
+
+    const total = deduped.length;
+    const page = Math.floor(offset / limit) + 1;
+    const list = deduped.slice(offset, offset + limit).map((l) => ({
+      id: l.id, poem_id: l.poem_id,
+      title: l.poems?.title ?? '', dynasty: l.poems?.dynasty ?? null, genre: l.poems?.genre ?? null,
+      work_id: l.poems?.work_id ?? null, work_name: l.poems?.works?.name ?? null,
+      author_id: l.author_id, author_name: l.authors?.name ?? '佚名',
+      created_at: l.created_at,
+    }));
+
+    res.json({ total, read_count, author_count: authorSet.size, page, pageSize: limit, totalPages: Math.ceil(total / limit), list });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // 每日推荐（依据阅读/搜索习惯个性化；无习惯则按日期轮换经典）
 router.get('/recommend/daily', async (req, res) => {
   try {
