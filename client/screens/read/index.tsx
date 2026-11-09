@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSafeRouter, useSafeSearchParams } from '@/hooks/useSafeRouter';
 import { Screen } from '@/components/Screen';
@@ -80,6 +80,8 @@ export default function ReadScreen() {
 
   return (
     <Screen backgroundColor={theme.bgRoot} safeAreaEdges={['top', 'left', 'right']} style={{ flex: 1 }}>
+      {/* 宣纸 + 隐现远山底纹 */}
+      <Image source={require('@/assets/guanwen/backgrounds/mountains_fog.png')} style={styles.verseBg} resizeMode="cover" />
       <View style={{ paddingTop: insets.top + 6, flex: 1 }}>
         <View style={styles.navRow}>
           <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={10}>
@@ -100,6 +102,7 @@ export default function ReadScreen() {
             <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
               {/* 诗文头部 */}
               <View style={styles.hero}>
+                <Image source={require('@/assets/guanwen/circles/plum_branch.png')} style={styles.heroOrn} />
                 <Text style={styles.genrePill}>{poem.genre}{poem.work_name ? ` · ${poem.work_name}` : ''}</Text>
                 <Text style={styles.title}>{poem.title}</Text>
                 <Text style={styles.byline}>{poem.dynasty} · {poem.author_name}</Text>
@@ -201,10 +204,12 @@ const styles = StyleSheet.create({
   center: { alignItems: 'center', paddingTop: 100 },
   error: { color: theme.primaryDeep, fontWeight: '600' },
   body: { paddingHorizontal: 20, paddingBottom: 48 },
+  verseBg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', opacity: 0.07 },
   hero: {
     backgroundColor: '#F3EBDB', borderRadius: 28, paddingVertical: 28, paddingHorizontal: 22, alignItems: 'center',
-    ...SHADOW_SOFT, marginBottom: 18,
+    ...SHADOW_SOFT, marginBottom: 18, overflow: 'hidden',
   },
+  heroOrn: { position: 'absolute', top: 12, right: 12, width: 46, height: 46, borderRadius: 23, opacity: 0.92 },
   genrePill: { backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4, fontSize: 11, color: theme.primaryDeep, fontWeight: '800', overflow: 'hidden' },
   title: { marginTop: 14, fontSize: 30, fontWeight: '900', color: theme.ink, letterSpacing: 2, textAlign: 'center' },
   byline: { marginTop: 8, fontSize: 14, color: theme.inkSoft, fontWeight: '700' },
