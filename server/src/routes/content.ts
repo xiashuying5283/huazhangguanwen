@@ -141,10 +141,29 @@ router.get('/works', async (_req, res) => {
     if (error) throw new Error(error.message);
     const withCounts = await Promise.all((data || []).map(async (w: any) => {
       const { count } = await client
-        .from('poems').select('*', { count: 'exact', head: true }).eq('work_id', w.id);
+        .from('collection_entries').select('*', { count: 'exact', head: true }).eq('work_id', w.id);
       return { ...w, author_name: w.authors?.name, poem_count: count ?? 0 };
     }));
     res.json(withCounts);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 按文集目录条目返回文集内容（分卷 + 篇次 + 版本篇名）
+router.get('/works/:id/entries', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const limit = req.query.limit ? Math.min(Number(req.query.limit), 500) : 200;
+    const offset = req.query.offset ? Number(req.query.offset) : 0;
+    let qb = client
+      .from('collection_entries')
+      .select('id, volume, sort_order, entry_title, poem_id, poems(id, title, dynasty, genre, cover_emoji, background_hint, author_id, authors(name))', { count: 'exact' })
+      .eq('work_id', id)
+      .order('sort_order', { ascending: true });
+    const { data, count, error } = await qb.range(offset, offset + limit - 1);
+    if (error) throw new Error(error.message);
+    res.json({ entries: data || [], total: count ?? 0 });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
