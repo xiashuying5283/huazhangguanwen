@@ -80,8 +80,9 @@ export default function ReadScreen() {
 
   return (
     <Screen backgroundColor={theme.bgRoot} safeAreaEdges={['top', 'left', 'right']} style={{ flex: 1 }}>
-      {/* 宣纸 + 隐现远山底纹 */}
-      <Image source={require('@/assets/guanwen/backgrounds/mountains_fog.png')} style={styles.verseBg} resizeMode="cover" />
+      {/* 水墨背景装饰：顶部红梅 + 底部淡墨远山 */}
+      <Image source={require('@/assets/guanwen/decorations/pink_plum_branch.png')} style={styles.topPlumBg} resizeMode="cover" />
+      <Image source={require('@/assets/guanwen/decorations/distant_mountain.png')} style={styles.baseMountainBg} resizeMode="cover" />
       <View style={{ paddingTop: insets.top + 6, flex: 1 }}>
         <View style={styles.navRow}>
           <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={10}>
@@ -204,7 +205,8 @@ const styles = StyleSheet.create({
   center: { alignItems: 'center', paddingTop: 100 },
   error: { color: theme.primaryDeep, fontWeight: '600' },
   body: { paddingHorizontal: 20, paddingBottom: 48 },
-  verseBg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', opacity: 0.07 },
+  topPlumBg: { position: 'absolute', top: 0, right: 0, width: 118, height: 96, opacity: 0.9 },
+  baseMountainBg: { position: 'absolute', bottom: 0, left: 0, right: 0, width: '100%', height: 120, opacity: 0.16 },
   hero: {
     backgroundColor: '#F3EBDB', borderRadius: 28, paddingVertical: 28, paddingHorizontal: 22, alignItems: 'center',
     ...SHADOW_SOFT, marginBottom: 18, overflow: 'hidden',
