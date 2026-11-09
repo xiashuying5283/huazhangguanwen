@@ -1,45 +1,85 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { BookCover, IconButton, Ink, Message, PageHeader, Paper, Segments, paperStyles as p } from '@/components/Paper';
-import { PaginationBar } from '@/components/PaginationBar';
 import { toggleFavorite, useReadingShelf } from '@/contexts/ReadingShelf';
 import { workType } from '@/data/art';
 import { loadWorks } from '@/data/works';
 import { useResource } from '@/hooks/useResource';
 import { useSafeRouter, useSafeSearchParams } from '@/hooks/useSafeRouter';
-import { Api, hasBackend, type Paged, type PoemSummary } from '@/utils/api';
+import { Api, hasBackend } from '@/utils/api';
 import { shareText } from '@/utils/share';
 import { theme } from '@/theme';
 
 const tabs = ['简介', '目录', '版本', '相关'] as const;
-const genreOrder = ['五言古诗', '五言绝句', '五言律诗', '七言绝句', '七言律诗'];
-const volumeLabels = '一二三四五六七八九十';
+const PAGE_SIZE = 500;
+
+interface WorkEntry {
+  id: string;
+  volume: string | null;
+  sort_order: number;
+  entry_title: string;
+  poem_id: string;
+  poems?: { id: string; title: string; dynasty?: string; genre?: string };
+}
 
 export default function WorkDetailScreen() {
   const router = useSafeRouter();
   const { id } = useSafeSearchParams<{ id?: string }>();
   const [tab, setTab] = useState<(typeof tabs)[number]>('目录');
   const [open, setOpen] = useState<string>();
-  const [page, setPage] = useState(1);
   const [notice, setNotice] = useState('');
   const shelf = useReadingShelf();
   const catalog = useResource(loadWorks);
   const work = catalog.data?.find((item) => item.id === id);
-  const authorCollection = id?.startsWith('author:');
-  const loadPoems = useCallback(() => id ? Api.get<Paged<PoemSummary>>(
-    `/api/v1/poems?${authorCollection ? 'author_id' : 'work_id'}=${encodeURIComponent(authorCollection ? id.slice(7) : id)}&limit=40&offset=${(page - 1) * 40}`
-  ) : Promise.resolve(undefined), [id, page, authorCollection]);
-  const poems = useResource(loadPoems);
-  const groups = new Map<string, PoemSummary[]>();
-  for (const poem of poems.data?.list ?? []) {
-    const genre = poem.genre || '诗文';
-    groups.set(genre, [...(groups.get(genre) ?? []), poem]);
+
+  // 真实卷次目录：来自 collection_entries（/works/:id/entries）
+  const [entries, setEntries] = useState<WorkEntry[]>([]);
+  const [entriesTotal, setEntriesTotal] = useState(0);
+  const [entriesError, setEntriesError] = useState('');
+  const [entriesLoading, setEntriesLoading] = useState(false);
+  const [loadMore, setLoadMore] = useState(false); // 是否还有更多
+  const [page, setPage] = useState(0);
+  const [moreLoading, setMoreLoading] = useState(false);
+
+  const fetchEntries = useCallback(async (targetPage: number, append: boolean) => {
+    if (!id) return;
+    if (append) setMoreLoading(true); else setEntriesLoading(true);
+    setEntriesError('');
+    try {
+      const d = await Api.get<{ entries: WorkEntry[]; total: number }>(
+        `/api/v1/works/${encodeURIComponent(id)}/entries?limit=${PAGE_SIZE}&offset=${targetPage * PAGE_SIZE}`
+      );
+      setEntries((prev) => (append ? [...prev, ...(d.entries ?? [])] : (d.entries ?? [])));
+      setEntriesTotal(d.total ?? 0);
+      setLoadMore(((targetPage + 1) * PAGE_SIZE) < (d.total ?? 0));
+      setPage(targetPage);
+    } catch (reason) {
+      setEntriesError(reason instanceof Error ? reason.message : '加载目录失败');
+    } finally {
+      setEntriesLoading(false);
+      setMoreLoading(false);
+    }
+  }, [id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (tab === '目录') fetchEntries(0, false);
+    }, [fetchEntries, tab])
+  );
+
+  // 按卷分组（保持目录顺序）
+  const volumeGroups = new Map<string, WorkEntry[]>();
+  for (const e of entries) {
+    const key = e.volume || '未分卷';
+    volumeGroups.set(key, [...(volumeGroups.get(key) ?? []), e]);
   }
-  const ordered = Array.from(groups.keys()).sort((a, b) =>
-    (genreOrder.indexOf(a) + genreOrder.length + 1) % (genreOrder.length + 1) -
-    (genreOrder.indexOf(b) + genreOrder.length + 1) % (genreOrder.length + 1));
+  const volumeList = Array.from(volumeGroups.keys());
+
   const favorite = shelf.data.favorites.some((item) => item.kind === '文集' && item.item.id === id);
+
+  const loadMoreEntries = () => fetchEntries(page + 1, true);
 
   return (
     <Paper scene="mountain">
@@ -71,28 +111,32 @@ export default function WorkDetailScreen() {
           {!!notice && <Message>{notice}</Message>}
           <View style={p.card}><Segments options={tabs} value={tab} onChange={setTab} /></View>
           {tab === '目录' && <View style={[p.card, styles.panel]}>
-            {poems.loading && <ActivityIndicator color={theme.primary} />}
-            {poems.error && <Message retry={poems.retry}>{poems.error}</Message>}
-            {poems.data?.list.length === 0 && <Message>暂未收录篇目</Message>}
-            {ordered.map((genre, index) => (
-              <View key={genre} style={p.divider}>
-                <Pressable style={[p.row, styles.volume]} accessibilityRole="button" accessibilityState={{ expanded: open === genre }} onPress={() => setOpen(open === genre ? undefined : genre)}>
-                  <Ink style={styles.volumeLabel}>{`卷${volumeLabels[index] ?? index + 1}`}</Ink>
-                  <Ink style={[p.flex, styles.volumeLabel]}>{genre}</Ink>
-                  <Ionicons name={open === genre ? 'chevron-up-outline' : 'chevron-down-outline'} size={18} color={theme.primary} />
+            {entriesLoading && <ActivityIndicator color={theme.primary} />}
+            {!entriesLoading && entriesError !== '' && <Message retry={() => fetchEntries(0, false)}>{entriesError}</Message>}
+            {!entriesLoading && entriesError === '' && entries.length === 0 && <Message>暂未收录篇目</Message>}
+            {volumeList.map((volume, index) => (
+              <View key={volume} style={p.divider}>
+                <Pressable style={[p.row, styles.volume]} accessibilityRole="button" accessibilityState={{ expanded: open === volume }} onPress={() => setOpen(open === volume ? undefined : volume)}>
+                  <Ink style={styles.volumeLabel}>{`卷${volume}`}</Ink>
+                  <Ink style={[p.flex, styles.volumeLabel]}>{(volumeGroups.get(volume) ?? []).length} 篇</Ink>
+                  <Ionicons name={open === volume ? 'chevron-up-outline' : 'chevron-down-outline'} size={18} color={theme.primary} />
                 </Pressable>
-                {open === genre && groups.get(genre)?.map((poem) => (
-                  <Pressable key={poem.id} accessibilityRole="button" style={[p.row, styles.poem]} onPress={() => router.push('/read', { id: poem.id })}>
-                    <Ink style={p.flex}>{poem.title}</Ink>
+                {open === volume && (volumeGroups.get(volume) ?? []).map((entry) => (
+                  <Pressable key={entry.id} accessibilityRole="button" style={[p.row, styles.poem]} onPress={() => entry.poems?.id && router.push('/read', { id: entry.poems.id })}>
+                    <Ink style={p.flex}>{entry.entry_title || entry.poems?.title}</Ink>
                     <Ionicons name="chevron-forward-outline" size={16} color={theme.primary} />
                   </Pressable>
                 ))}
               </View>
             ))}
-            {poems.data && poems.data.totalPages > 1 && <PaginationBar {...poems.data} onPrev={() => { setOpen(undefined); setPage(page - 1); }} onNext={() => { setOpen(undefined); setPage(page + 1); }} />}
+            {loadMore && (
+              <Pressable style={styles.more} accessibilityRole="button" disabled={moreLoading} onPress={loadMoreEntries}>
+                {moreLoading ? <ActivityIndicator color={theme.primary} size="small" /> : <Ink style={styles.moreText}>展开余卷（已载 {entries.length}/{entriesTotal} 篇）</Ink>}
+              </Pressable>
+            )}
           </View>}
-          {tab === '简介' && <View style={[p.card, styles.textPanel]}><Ink style={p.body}>{work.description || work.name}{'\n'}收录篇目 {work.poem_count ?? poems.data?.total ?? '—'} 篇</Ink></View>}
-          {tab === '版本' && <View style={[p.card, styles.textPanel]}><Ink style={p.body}>{hasBackend ? '文本来源为观文文库。' : '文本来源为观文内置选篇。'}目录按本页收录诗文的体裁分组。</Ink></View>}
+          {tab === '简介' && <View style={[p.card, styles.textPanel]}><Ink style={p.body}>{work.description || work.name}{'\n'}收录篇目 {(work.poem_count ?? entriesTotal) || '—'} 篇</Ink></View>}
+          {tab === '版本' && <View style={[p.card, styles.textPanel]}><Ink style={p.body}>{hasBackend ? '文本来源为观文文库。' : '文本来源为观文内置选篇。'}目录按本集的真实卷次与篇次编排。</Ink></View>}
           {tab === '相关' && <View style={[p.card, styles.panel]}>
             {work.author_id && <Pressable style={styles.volume} accessibilityRole="button" onPress={() => router.push('/poet-detail', { id: work.author_id })}><Ink>查看人物 · {work.author_name}</Ink></Pressable>}
             {catalog.data?.filter((item) => item.id !== id && workType(item.name) === workType(work.name)).slice(0, 4).map((item) => (
@@ -116,4 +160,6 @@ const styles = StyleSheet.create({
   volume: { minHeight: 57, justifyContent: 'center' },
   volumeLabel: { fontSize: 20 },
   poem: { paddingLeft: 19, minHeight: 44 },
+  more: { marginTop: 14, paddingVertical: 13, alignItems: 'center' },
+  moreText: { color: theme.primary, fontSize: 16 },
 });
