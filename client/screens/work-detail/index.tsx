@@ -117,7 +117,7 @@ export default function WorkDetailScreen() {
             {volumeList.map((volume, index) => (
               <View key={volume} style={p.divider}>
                 <Pressable style={[p.row, styles.volume]} accessibilityRole="button" accessibilityState={{ expanded: open === volume }} onPress={() => setOpen(open === volume ? undefined : volume)}>
-                  <Ink style={styles.volumeLabel}>{`卷${volume}`}</Ink>
+                  <Ink style={styles.volumeLabel}>{volume}</Ink>
                   <Ink style={[p.flex, styles.volumeLabel]}>{(volumeGroups.get(volume) ?? []).length} 篇</Ink>
                   <Ionicons name={open === volume ? 'chevron-up-outline' : 'chevron-down-outline'} size={18} color={theme.primary} />
                 </Pressable>
