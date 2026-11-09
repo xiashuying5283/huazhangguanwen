@@ -68,7 +68,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: '我的',
+          title: '书斋',
           tabBarIcon: ({ color }) => (
             <FontAwesome6 name="heart" size={20} color={color} />
           ),
