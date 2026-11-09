@@ -11,6 +11,7 @@ import { useSafeRouter, useSafeSearchParams } from '@/hooks/useSafeRouter';
 import { Api, hasBackend } from '@/utils/api';
 import { shareText } from '@/utils/share';
 import { theme } from '@/theme';
+import HugeCatalogList from './HugeCatalogList';
 
 const tabs = ['简介', '目录', '版本', '相关'] as const;
 const PAGE_SIZE = 500;
@@ -43,15 +44,8 @@ export default function WorkDetailScreen() {
   const [page, setPage] = useState(0);
   const [moreLoading, setMoreLoading] = useState(false);
 
-  // 巨型文集（如全唐诗）：目录按作者分卷分层，先聚合再点开展开拉取
+  // 巨型文集（如全唐诗）：目录走独立虚拟化组件 HugeCatalogList
   const isHuge = (work?.poem_count ?? 0) > 3000;
-  const [catalogVols, setCatalogVols] = useState<{ volume: string; count: number }[]>([]);
-  const [catLoading, setCatLoading] = useState(false);
-  const [catError, setCatError] = useState('');
-  const [volEntries, setVolEntries] = useState<Record<string, WorkEntry[]>>({});
-  const [volLoading, setVolLoading] = useState<string>();
-  const [volError, setVolError] = useState('');
-  const [volMore, setVolMore] = useState<Record<string, { loaded: number; total: number }>>({});
 
   const fetchEntries = useCallback(async (targetPage: number, append: boolean) => {
     if (!id) return;
@@ -73,69 +67,12 @@ export default function WorkDetailScreen() {
     }
   }, [id]);
 
-  const fetchCatalog = useCallback(async () => {
-    if (!id) return;
-    setCatLoading(true);
-    setCatError('');
-    try {
-      const d = await Api.get<{ catalog: { volume: string; count: number }[] }>(
-        `/api/v1/works/${encodeURIComponent(id)}/catalog`
-      );
-      setCatalogVols(d.catalog ?? []);
-    } catch (reason) {
-      setCatError(reason instanceof Error ? reason.message : '加载目录失败');
-    } finally {
-      setCatLoading(false);
-    }
-  }, [id]);
-
-  const openVolume = async (volume: string) => {
-    if (!id) return;
-    if (open === volume) { setOpen(undefined); return; }
-    setOpen(volume);
-    if (volEntries[volume]) return;
-    setVolLoading(volume);
-    setVolError('');
-    try {
-      const d = await Api.get<{ entries: WorkEntry[]; total?: number }>(
-        `/api/v1/works/${encodeURIComponent(id)}/entries?volume=${encodeURIComponent(volume)}&limit=500&offset=0`
-      );
-      const list = d.entries ?? [];
-      setVolEntries((prev) => ({ ...prev, [volume]: list }));
-      setVolMore((prev) => ({ ...prev, [volume]: { loaded: list.length, total: d.total ?? list.length } }));
-    } catch (reason) {
-      setVolError(reason instanceof Error ? reason.message : '加载失败');
-    } finally {
-      setVolLoading(undefined);
-    }
-  };
-
-  const loadMoreVolume = async (volume: string) => {
-    if (!id) return;
-    setVolLoading(volume);
-    setVolError('');
-    try {
-      const cur = volMore[volume];
-      const offset = cur ? cur.loaded : (volEntries[volume]?.length ?? 0);
-      const d = await Api.get<{ entries: WorkEntry[]; total?: number }>(
-        `/api/v1/works/${encodeURIComponent(id)}/entries?volume=${encodeURIComponent(volume)}&limit=500&offset=${offset}`
-      );
-      const list = d.entries ?? [];
-      setVolEntries((prev) => ({ ...prev, [volume]: [...(prev[volume] ?? []), ...list] }));
-      setVolMore((prev) => ({ ...prev, [volume]: { loaded: offset + list.length, total: d.total ?? offset + list.length } }));
-    } catch (reason) {
-      setVolError(reason instanceof Error ? reason.message : '加载失败');
-    } finally {
-      setVolLoading(undefined);
-    }
-  };
-
   useFocusEffect(
     useCallback(() => {
       if (tab !== '目录') return;
       if (!work) return;
-      if (isHuge) fetchCatalog(); else fetchEntries(0, false);
-    }, [tab, work, isHuge, fetchCatalog, fetchEntries])
+      if (!isHuge) fetchEntries(0, false);
+    }, [tab, work, isHuge, fetchEntries])
   );
 
   // 按卷分组（保持目录顺序）
@@ -161,6 +98,9 @@ export default function WorkDetailScreen() {
           }} />
         </>}
       </PageHeader>
+      {isHuge && tab === '目录' ? (
+        <HugeCatalogList workId={id} />
+      ) : (
       <ScrollView style={p.scroll} contentContainerStyle={p.content} showsVerticalScrollIndicator={false}>
         {catalog.loading && <ActivityIndicator color={theme.primary} />}
         {catalog.error && <Message retry={catalog.retry}>{catalog.error}</Message>}
@@ -180,40 +120,6 @@ export default function WorkDetailScreen() {
           {!!notice && <Message>{notice}</Message>}
           <View style={p.card}><Segments options={tabs} value={tab} onChange={setTab} /></View>
           {tab === '目录' && <View style={[p.card, styles.panel]}>
-            {isHuge ? (
-              <>
-                {catLoading && <ActivityIndicator color={theme.primary} />}
-                {!catLoading && catError !== '' && <Message retry={fetchCatalog}>{catError}</Message>}
-                {!catLoading && catError === '' && catalogVols.length === 0 && <Message>暂未收录篇目</Message>}
-                {catalogVols.map((v) => {
-                  const expanded = open === v.volume;
-                  const items = volEntries[v.volume];
-                  return (
-                    <View key={v.volume} style={p.divider}>
-                      <Pressable style={[p.row, styles.volume]} accessibilityRole="button" accessibilityState={{ expanded }} onPress={() => openVolume(v.volume)}>
-                        <Ink style={styles.volumeLabel}>{v.volume}</Ink>
-                        <Ink style={[p.flex, styles.volumeLabel]}>{v.count} 篇</Ink>
-                        {expanded && volLoading === v.volume && <ActivityIndicator size="small" color={theme.primary} />}
-                        <Ionicons name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'} size={18} color={theme.primary} />
-                      </Pressable>
-                      {expanded && volError !== '' && <Message retry={() => openVolume(v.volume)}>{volError}</Message>}
-                      {expanded && !volLoading && items && items.map((entry) => (
-                        <Pressable key={entry.id} accessibilityRole="button" style={[p.row, styles.poem]} onPress={() => entry.poems?.id && router.push('/read', { id: entry.poems.id })}>
-                          <Ink style={p.flex}>{entry.entry_title || entry.poems?.title}</Ink>
-                          <Ionicons name="chevron-forward-outline" size={16} color={theme.primary} />
-                        </Pressable>
-                      ))}
-                      {expanded && items && volMore[v.volume] && volMore[v.volume].loaded < volMore[v.volume].total && (
-                        <Pressable style={styles.more} accessibilityRole="button" disabled={volLoading === v.volume} onPress={() => loadMoreVolume(v.volume)}>
-                          {volLoading === v.volume ? <ActivityIndicator size="small" color={theme.primary} /> : <Ink style={styles.moreText}>载入更多该作者（已载 {volMore[v.volume].loaded}/{volMore[v.volume].total} 篇）</Ink>}
-                        </Pressable>
-                      )}
-                    </View>
-                  );
-                })}
-              </>
-            ) : (
-            <>
             {entriesLoading && <ActivityIndicator color={theme.primary} />}
             {!entriesLoading && entriesError !== '' && <Message retry={() => fetchEntries(0, false)}>{entriesError}</Message>}
             {!entriesLoading && entriesError === '' && entries.length === 0 && <Message>暂未收录篇目</Message>}
@@ -237,8 +143,6 @@ export default function WorkDetailScreen() {
                 {moreLoading ? <ActivityIndicator color={theme.primary} size="small" /> : <Ink style={styles.moreText}>展开余卷（已载 {entries.length}/{entriesTotal} 篇）</Ink>}
               </Pressable>
             )}
-            </>
-            )}
           </View>}
           {tab === '简介' && <View style={[p.card, styles.textPanel]}><Ink style={p.body}>{work.description || work.name}{'\n'}收录篇目 {(work.poem_count ?? entriesTotal) || '—'} 篇</Ink></View>}
           {tab === '版本' && <View style={[p.card, styles.textPanel]}><Ink style={p.body}>{hasBackend ? '文本来源为观文文库。' : '文本来源为观文内置选篇。'}目录按本集的真实卷次与篇次编排。</Ink></View>}
@@ -250,6 +154,7 @@ export default function WorkDetailScreen() {
           </View>}
         </>}
       </ScrollView>
+      )}
     </Paper>
   );
 }
