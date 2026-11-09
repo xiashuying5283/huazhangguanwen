@@ -181,6 +181,13 @@ const poems: PoemSeed[] = [
 ];
 
 async function main() {
+  // [SEED_DISABLED] 默认禁用：本库以真实语料(34万篇)为准，seed 手工数据已清除。
+  // 如需重跑必须显式设置 RUN_SEED=1（会清空现有全部数据，谨慎！）
+  if (process.env.RUN_SEED !== '1') {
+    console.warn('[seed] 已禁用：数据库以真实语料为准，跳过手工 seed。');
+    return;
+  }
+
   const client = getSupabaseClient();
 
   // 清空旧数据（按依赖顺序，防止外键冲突）
