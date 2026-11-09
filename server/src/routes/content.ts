@@ -153,17 +153,59 @@ router.get('/works', async (_req, res) => {
   }
 });
 
+// 作品卷次/作者目录聚合（目录 tab 的分层展示，尤其适用于全唐诗等巨型文集）
+const catalogCache = new Map<string, { at: number; vols: { volume: string; count: number }[] }>();
+router.get('/works/:id/catalog', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const cached = catalogCache.get(id);
+    if (cached && Date.now() - cached.at < 60000) {
+      res.json({ catalog: cached.vols });
+      return;
+    }
+    const agg = new Map<string, { volume: string; count: number; first: number }>();
+    let from = 0;
+    const PAGE = 1000;
+    for (;;) {
+      const { data, error } = await client
+        .from('collection_entries')
+        .select('volume, sort_order')
+        .eq('work_id', id)
+        .order('sort_order', { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(error.message);
+      if (!data || data.length === 0) break;
+      for (const r of data) {
+        const key = r.volume || '未分卷';
+        const cur = agg.get(key) ?? { volume: key, count: 0, first: Infinity };
+        cur.count += 1;
+        cur.first = Math.min(cur.first, r.sort_order);
+        agg.set(key, cur);
+      }
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+    const vols = Array.from(agg.values()).sort((a, b) => a.first - b.first);
+    catalogCache.set(id, { at: Date.now(), vols });
+    res.json({ catalog: vols });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // 按文集目录条目返回文集内容（分卷 + 篇次 + 版本篇名）
 router.get('/works/:id/entries', async (req, res) => {
   try {
     const { id } = req.params;
     const limit = req.query.limit ? Math.min(Number(req.query.limit), 500) : 200;
     const offset = req.query.offset ? Number(req.query.offset) : 0;
+    const volume = req.query.volume as string | undefined;
     let qb = client
       .from('collection_entries')
       .select('id, volume, sort_order, entry_title, poem_id, poems(id, title, dynasty, genre, cover_emoji, background_hint, author_id)', { count: 'exact' })
       .eq('work_id', id)
       .order('sort_order', { ascending: true });
+    if (volume) qb = qb.eq('volume', volume);
     const { data, count, error } = await qb.range(offset, offset + limit - 1);
     if (error) throw new Error(error.message);
     res.json({ entries: data || [], total: count ?? 0 });
