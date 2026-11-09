@@ -4,7 +4,6 @@ import { useFocusEffect } from 'expo-router';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { Screen } from '@/components/Screen';
-import { AppHeader } from '@/components/AppHeader';
 import { SearchModal } from '@/components/SearchModal';
 import { getDeviceId } from '@/utils/device';
 import { Api, type PoemDetail } from '@/utils/api';
@@ -46,7 +45,26 @@ export default function HomeScreen() {
   return (
     <Screen backgroundColor={theme.bgRoot} safeAreaEdges={['left', 'right', 'bottom']} style={{ flex: 1 }}>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <AppHeader title="今日荐诗" icon="leaf" subtitle="读一首刚刚好的诗词" onSearch={() => setSearchOpen(true)} />
+        <View style={styles.banner}>
+          <Image source={require('@/assets/guanwen/backgrounds/mountains_fog.png')} style={styles.bannerBg} resizeMode="cover" />
+          <View style={styles.bannerShade} />
+          <Image source={require('@/assets/guanwen/decorations/pink_plum_branch.png')} style={styles.bannerPlum} />
+          <View style={styles.bannerBody}>
+            <View style={styles.brandRow}>
+              <Text style={styles.brandTitle}>观文</Text>
+              <View style={styles.brandSloganCol}>
+                {['读', '诗', '·', '读', '人', '·', '读', '典', '籍'].map((ch, i) => (
+                  <Text key={i} style={styles.brandSloganChar}>{ch}</Text>
+                ))}
+              </View>
+            </View>
+          </View>
+          <Pressable onPress={() => setSearchOpen(true)} style={styles.bannerSearch}>
+            <FontAwesome6 name="magnifying-glass" size={17} color={theme.primaryDeep} />
+          </Pressable>
+        </View>
+
+        <Text style={styles.dayTitle}>今日荐诗</Text>
 
         {loading ? (
           <View style={styles.center}><ActivityIndicator color={theme.primary} /></View>
@@ -111,6 +129,27 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 20, paddingBottom: 40 },
   center: { alignItems: 'center', paddingTop: 80 },
   error: { color: theme.primaryDeep, fontWeight: '600' },
+
+  banner: {
+    height: 200, borderRadius: 26, marginBottom: 8, marginTop: 8, overflow: 'hidden',
+    ...SHADOW_PINK,
+  },
+  bannerBg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
+  bannerShade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,252,244,0.16)' },
+  bannerPlum: { position: 'absolute', top: -14, left: 4, width: 120, height: 100, opacity: 0.92 },
+  bannerBody: { ...StyleSheet.absoluteFillObject, justifyContent: 'center' },
+  bannerSearch: {
+    position: 'absolute', top: 14, right: 14, width: 38, height: 38, borderRadius: 14,
+    backgroundColor: 'rgba(255,252,244,0.72)', alignItems: 'center', justifyContent: 'center',
+  },
+  brandRow: { flexDirection: 'row', alignItems: 'center', marginLeft: 30 },
+  brandTitle: { fontSize: 46, fontWeight: '900', color: theme.ink, letterSpacing: 10 },
+  brandSloganCol: { flexDirection: 'column', marginLeft: 14 },
+  brandSloganChar: { fontSize: 11, fontWeight: '700', color: theme.primaryDeep, lineHeight: 15, letterSpacing: 0 },
+  dayTitle: {
+    fontSize: 22, fontWeight: '900', color: theme.ink, letterSpacing: 1,
+    marginTop: 18, marginBottom: 14,
+  },
   hero: {
     backgroundColor: '#F6EEDD', borderRadius: 28, padding: 24, marginBottom: 20,
     overflow: 'hidden',
