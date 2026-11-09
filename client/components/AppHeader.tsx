@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
   },
   left: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   iconWrap: {
-    width: 46, height: 46, borderRadius: 16, backgroundColor: '#FFE3E6',
+    width: 46, height: 46, borderRadius: 16, backgroundColor: '#E7E0D2',
     alignItems: 'center', justifyContent: 'center',
   },
   title: { fontSize: 26, fontWeight: '900', color: theme.ink, letterSpacing: 1 },

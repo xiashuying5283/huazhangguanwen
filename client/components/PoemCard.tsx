@@ -1,9 +1,24 @@
 import { memo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { useSafeRouter } from '@/hooks/useSafeRouter';
 import type { PoemSummary } from '@/utils/api';
 import { pickCardBg, theme } from '@/theme';
+
+const CIRCLES = [
+  require('@/assets/guanwen/circles/misty_mountains.png'),
+  require('@/assets/guanwen/circles/sunset_river.png'),
+  require('@/assets/guanwen/circles/bamboo_grove.png'),
+  require('@/assets/guanwen/circles/lotus_pond.png'),
+  require('@/assets/guanwen/circles/plum_branch.png'),
+  require('@/assets/guanwen/circles/sailing_boats.png'),
+  require('@/assets/guanwen/circles/autumn_maples.png'),
+  require('@/assets/guanwen/circles/snowy_pines.png'),
+  require('@/assets/guanwen/circles/plum_pavilion.png'),
+  require('@/assets/guanwen/circles/golden_fields.png'),
+  require('@/assets/guanwen/circles/mountain_waterfall.png'),
+  require('@/assets/guanwen/circles/winter_village.png'),
+];
 
 function excerpt(content: string): string {
   return (content || '').split('\n').slice(0, 2).join('\n');
@@ -12,13 +27,14 @@ function excerpt(content: string): string {
 export const PoemCard = memo(function PoemCard({ poem }: { poem: PoemSummary }) {
   const router = useSafeRouter();
   const bg = pickCardBg(poem.background_hint);
+  const stamp = CIRCLES[Math.abs(Number(poem.id) || 0) % CIRCLES.length];
   return (
     <Pressable
       onPress={() => router.push('/read', { id: poem.id })}
       style={({ pressed }) => [styles.card, { backgroundColor: bg }, pressed && styles.pressed]}
     >
       <View style={styles.topRow}>
-        <Text style={styles.emoji}>{poem.cover_emoji ?? ''}</Text>
+        <Image source={stamp} style={styles.stamp} />
         <View style={styles.badges}>
           {poem.genre ? <View style={styles.badge}><Text style={styles.badgeText}>{poem.genre}</Text></View> : null}
           <View style={styles.badge}><Text style={styles.badgeText}>{poem.dynasty}</Text></View>
@@ -45,7 +61,7 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.9, transform: [{ scale: 0.98 }] },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  emoji: { fontSize: 26 },
+  stamp: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(53,87,67,0.10)' },
   badges: { flexDirection: 'row', gap: 6 },
   badge: { backgroundColor: 'rgba(255,255,255,0.75)', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3 },
   badgeText: { color: theme.inkSoft, fontSize: 11, fontWeight: '700' },

@@ -215,8 +215,8 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   inputBoxError: {
-    borderColor: '#EF4444', // Red 500
-    backgroundColor: '#FEF2F2', // Red 50
+    borderColor: '#B03A34', // error 胭红
+    backgroundColor: '#FBEAE4', // error 淡纸
   },
   text: {
     fontSize: 16,
@@ -233,6 +233,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginLeft: 2,
     fontSize: 12,
-    color: '#EF4444',
+    color: '#B03A34',
   }
 });

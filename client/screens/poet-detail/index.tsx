@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
   error: { color: theme.primaryDeep, fontWeight: '600' },
   emptyTxt: { color: theme.muted, fontWeight: '600' },
   hero: { alignItems: 'center', paddingVertical: 20, paddingHorizontal: 20 },
-  avatarWrap: { width: 92, height: 92, borderRadius: 30, backgroundColor: '#FFE1E4', alignItems: 'center', justifyContent: 'center', shadowColor: theme.shadowPrimary, shadowOffset: { width: 0, height: 8 }, shadowRadius: 16, shadowOpacity: 1, elevation: 6 },
+  avatarWrap: { width: 92, height: 92, borderRadius: 30, backgroundColor: '#E9EFE6', alignItems: 'center', justifyContent: 'center', shadowColor: theme.shadowPrimary, shadowOffset: { width: 0, height: 8 }, shadowRadius: 16, shadowOpacity: 1, elevation: 6 },
   avatarEmoji: { fontSize: 46 },
   name: { marginTop: 14, fontSize: 26, fontWeight: '900', color: theme.ink, letterSpacing: 1 },
   dynasty: { marginTop: 4, fontSize: 13, color: theme.primaryDeep, fontWeight: '800' },
