@@ -21,56 +21,58 @@ function contentPy(content: string) {
   return (content || '').split('\n').map(linePy);
 }
 
-async function flush(batch: { id: string; pinyin: { c: string; p: string }[][] }[]) {
-  for (const b of batch) {
-    await client.from('poems').update({ pinyin: b.pinyin }).eq('id', b.id);
-  }
-  console.log('  flushed', batch.length);
-}
+const BATCH = 200;
 
-async function backfill(limit: number) {
+async function backfill(maxRows: number) {
   let done = 0;
-  let start = 0;
-  let chunk: { id: string; pinyin: { c: string; p: string }[][] }[] = [];
+  // 每轮都取当前仍为 null 的批（不带偏移），更新后这些行即从结果集消失，
+  // 因此既不漏篇、也不重复，天然规避 range 偏移错位问题。
   for (;;) {
-    if (done >= limit) break;
-    const ps = Math.min(limit - done, 200);
+    if (done >= maxRows) break;
+    const take = Math.min(BATCH, maxRows - done);
     const { data, error } = await client
       .from('poems')
       .select('id, content')
       .is('pinyin', null)
-      .range(start, start + ps - 1);
+      .limit(take);
     if (error) throw new Error(error.message);
     const rows = (data || []) as { id: string; content: string | null }[];
-    if (!rows.length) break;
-    for (const r of rows) {
-      try {
-        chunk.push({ id: r.id, pinyin: contentPy(r.content || '') });
-        done++;
-      } catch (e: any) {
-        console.error('skip', r.id, e.message);
-      }
+    if (!rows.length) break; // 已无待处理行
+
+    const upd = rows
+      .map((r) => ({ id: r.id, pinyin: contentPy(r.content || '') }))
+      .filter((u) => u.pinyin.length > 0);
+    if (upd.length) {
+      // 逐条 update（仅写 pinyin 列），并发 3 + 间隔，规避 API 限流
+      const queue = [...upd];
+      const runOne = async () => {
+        while (queue.length) {
+          const u = queue.shift()!;
+          const { error: ue } = await client.from('poems').update({ pinyin: u.pinyin }).eq('id', u.id);
+          if (ue) throw new Error(`update 失败: ${ue.message}`);
+          await new Promise((r) => setTimeout(r, 60));
+        }
+      };
+      const workers = Array.from({ length: Math.min(3, queue.length) }, () => runOne());
+      await Promise.all(workers);
     }
-    if (chunk.length >= 200) {
-      await flush(chunk);
-      chunk = [];
-    }
-    if (rows.length < ps) break;
-    start += rows.length;
+    done += rows.length;
+    console.log('  已处理', done, '(本轮', rows.length, ')');
+    if (rows.length < take) break;
   }
-  if (chunk.length) await flush(chunk);
   return done;
 }
 
 function parse(): { limit: number } {
   const a = process.argv.slice(2);
   const i = a.indexOf('--limit');
-  return { limit: i >= 0 ? Number(a[i + 1]) : 200 };
+  return { limit: i >= 0 ? Number(a[i + 1]) : 1000000 };
 }
 
 (async () => {
-  console.log('开始为正文拼音回填，limit =', parse().limit);
-  const n = await backfill(parse().limit);
+  const { limit } = parse();
+  console.log('开始为正文拼音回填，limit =', limit);
+  const n = await backfill(limit);
   console.log('完成，共', n, '篇');
 })().catch((e) => {
   console.error(e);
