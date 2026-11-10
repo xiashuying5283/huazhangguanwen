@@ -93,7 +93,8 @@ export default function ReadScreen() {
               <Ink style={styles.byline}>{poem.dynasty} · {poem.author_name ?? '佚名'}</Ink>
             </Pressable>
             <Verse content={displayContent}
-              pinyin={preferences.pinyin ? poem.pinyin : undefined} size={preferences.fontSize} />
+              pinyin={preferences.pinyin ? poem.pinyin : undefined} size={preferences.fontSize}
+              isVerse={poem.genre === '诗'} />
             {hasMore && <Pressable accessibilityRole="button" accessibilityState={{ expanded }} style={styles.expand} onPress={() => setExpanded(!expanded)}><Ink style={styles.expandText}>{expanded ? '收起全文' : '展开全文'}</Ink></Pressable>}
           </View>
           {!!notice && <Message>{notice}</Message>}
@@ -136,7 +137,7 @@ export default function ReadScreen() {
   );
 }
 
-function Verse({ content, pinyin, size }: { content: string; pinyin?: PinyinChar[][] | null; size: number }) {
+function Verse({ content, pinyin, size, isVerse = true }: { content: string; pinyin?: PinyinChar[][] | null; size: number; isVerse?: boolean }) {
   const { width } = useWindowDimensions();
   const lines = content.split('\n');
   // 估算单行可容纳字数：每字符占 1 个字宽 + letterSpacing，两边留余量
@@ -184,6 +185,15 @@ function Verse({ content, pinyin, size }: { content: string; pinyin?: PinyinChar
     }
     return out;
   };
+
+  // 文章（序/记/传等）：按自然段排版，不居中、不按标点折行，交给 Text 自然换行
+  if (!isVerse) {
+    return <View style={styles.verse}>
+      {lines.map((para, i) => (
+        <Ink key={i} style={[styles.line, { fontSize: size, lineHeight: Math.round(size * 1.8), textAlign: 'left' }]}>{para || ' '}</Ink>
+      ))}
+    </View>;
+  }
 
   return <View style={styles.verse}>
     {lines.flatMap((line, i) => {
