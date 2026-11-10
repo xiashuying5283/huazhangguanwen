@@ -143,26 +143,44 @@ function Verse({ content, pinyin, size }: { content: string; pinyin?: PinyinChar
   const capacity = Math.max(4, Math.floor((width - 48) / (size + 4)));
 
   // 把超长行切成若干段，每段独立渲染（避免被 flexWrap 掰弯后标点孤行）
+  // 优先在句内标点（逗/顿/分/句号等）处断，保证每个子句完整不拆断；
+  // 找不到合适标点的超长纯句才退回到按容量切，但仍避免行首落结尾标点。
   const toChunks = (line: string): string[] => {
     const arr = Array.from(line);
     if (arr.length <= capacity) return [line];
+
+    // 句子级断点：这些标点之后是自然的换行处（句号、逗号、分号、顿号、冒号、叹问、省略）
+    const SENT_BREAK = /[。？！；、，：…]/;
+    // 行首不应出现这些结尾标点
+    const LEAD_END_PUNCT = /^[，。、；：？！）」』…·]/;
+
     const out: string[] = [];
-    const LEAD_END_PUNCT = /^[，。、；：？！）」』…·]/; // 行首不应出现这些标点
     let i = 0;
+    const push = (end: number) => { out.push(arr.slice(i, end).join('')); i = end; };
+
     while (i < arr.length) {
-      let end = Math.min(i + capacity, arr.length);
-      // 若当前段首是"结尾标点"，把它并入上一段（必要时少装一个字符）
+      const endMax = Math.min(i + capacity, arr.length);
+      if (i + capacity >= arr.length) { push(arr.length); break; }
+
+      // 在 [i, endMax] 内找"最后一个"句内标点之后的断点（即标点所在索引+1）
+      let breakAt = -1;
+      for (let k = i; k < endMax; k++) {
+        if (SENT_BREAK.test(arr[k]) && k + 1 <= endMax) {
+          // 允许标点连同其后紧跟的结尾类连标点一起走，但断点不超过 capacity
+          let nk = k + 1;
+          while (nk < arr.length && LEAD_END_PUNCT.test(arr[nk])) nk += 1;
+          if (nk <= endMax) breakAt = nk;
+        }
+      }
+      if (breakAt > i) { push(breakAt); continue; }
+
+      // 没有合适的标点断点（超长纯句）：按容量切，避免行首落结尾标点
+      let end = endMax;
       if (i > 0 && LEAD_END_PUNCT.test(arr[i])) {
-        if (out.length) out[out.length - 1] += arr[i];
-        i += 1;
-        continue;
+        if (out.length) { out[out.length - 1] += arr[i]; i += 1; continue; }
       }
-      // 若段尾后紧邻结尾标点，则标点随本段走，避免下一段以标点开头
-      while (end < arr.length && LEAD_END_PUNCT.test(arr[end])) {
-        end += 1;
-      }
-      out.push(arr.slice(i, end).join(''));
-      i = end;
+      while (end < arr.length && LEAD_END_PUNCT.test(arr[end])) end += 1;
+      push(end);
     }
     return out;
   };
