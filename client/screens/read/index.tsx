@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { IconButton, Ink, Message, PageHeader, Paper, Segments, paperStyles as p } from '@/components/Paper';
 import { DialogRow, PaperDialog } from '@/components/PaperDialog';
 import { ReadingAudio } from '@/components/ReadingAudio';
@@ -137,17 +137,53 @@ export default function ReadScreen() {
 }
 
 function Verse({ content, pinyin, size }: { content: string; pinyin?: PinyinChar[][] | null; size: number }) {
+  const { width } = useWindowDimensions();
   const lines = content.split('\n');
+  // 估算单行可容纳字数：每字符占 1 个字宽 + letterSpacing，两边留余量
+  const capacity = Math.max(4, Math.floor((width - 48) / (size + 4)));
+
+  // 把超长行切成若干段，每段独立渲染（避免被 flexWrap 掰弯后标点孤行）
+  const toChunks = (line: string): string[] => {
+    const arr = Array.from(line);
+    if (arr.length <= capacity) return [line];
+    const out: string[] = [];
+    const LEAD_END_PUNCT = /^[，。、；：？！）」』…·]/; // 行首不应出现这些标点
+    let i = 0;
+    while (i < arr.length) {
+      let end = Math.min(i + capacity, arr.length);
+      // 若当前段首是"结尾标点"，把它并入上一段（必要时少装一个字符）
+      if (i > 0 && LEAD_END_PUNCT.test(arr[i])) {
+        if (out.length) out[out.length - 1] += arr[i];
+        i += 1;
+        continue;
+      }
+      // 若段尾后紧邻结尾标点，则标点随本段走，避免下一段以标点开头
+      while (end < arr.length && LEAD_END_PUNCT.test(arr[end])) {
+        end += 1;
+      }
+      out.push(arr.slice(i, end).join(''));
+      i = end;
+    }
+    return out;
+  };
+
   return <View style={styles.verse}>
-    {lines.map((line, i) => pinyin?.[i]
-      ? <View key={i} style={styles.pyLine}>{Array.from(line).map((char, j) => (
-        <View key={j} style={styles.pyCell}>
-          <Ink style={styles.py}>{pinyin[i][j]?.p ?? ''}</Ink>
-          <Ink style={{ fontSize: size }}>{char}</Ink>
-        </View>
-      ))}</View>
-      : <Ink key={i} style={[styles.line, { fontSize: size, lineHeight: Math.round(size * 1.66) }]}>{line || ' '}</Ink>
-    )}
+    {lines.flatMap((line, i) => {
+      const chunks = toChunks(line);
+      let offset = 0;
+      return chunks.map((chunk, k) => {
+        const el = pinyin?.[i]
+          ? <View key={`${i}-${k}`} style={styles.pyLine}>{Array.from(chunk).map((char, j) => (
+              <View key={j} style={styles.pyCell}>
+                <Ink style={styles.py}>{pinyin[i][offset + j]?.p ?? ''}</Ink>
+                <Ink style={{ fontSize: size }}>{char}</Ink>
+              </View>
+            ))}</View>
+          : <Ink key={`${i}-${k}`} style={[styles.line, { fontSize: size, lineHeight: Math.round(size * 1.66) }]}>{chunk || ' '}</Ink>;
+        offset += Array.from(chunk).length;
+        return el;
+      });
+    })}
   </View>;
 }
 
