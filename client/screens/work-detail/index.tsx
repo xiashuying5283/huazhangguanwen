@@ -112,7 +112,7 @@ export default function WorkDetailScreen() {
               <Ink style={styles.title}>{work.name}</Ink>
               <Ink style={p.meta}>{[work.era, work.author_name].filter(Boolean).join(' · ')}</Ink>
               <View style={styles.tags}>
-                {[workType(work.name), ...(work.name === '王维集' ? ['田园', '山水'] : [])].map((tag) => <Ink key={tag} style={styles.tag}>{tag}</Ink>)}
+                {[workType(work.name), ...(work.name === '王右丞集' ? ['田园', '山水'] : [])].map((tag) => <Ink key={tag} style={styles.tag}>{tag}</Ink>)}
               </View>
             </View>
           </View>

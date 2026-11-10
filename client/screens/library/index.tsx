@@ -15,7 +15,7 @@ import { shareText } from '@/utils/share';
 import { theme } from '@/theme';
 
 const filters = ['诗集', '词集', '文集', '总集'] as const;
-const featuredOrder = ['王维集', '李白集', '杜甫集'];
+const featuredOrder = ['王右丞集', '李太白集', '杜甫集'];
 
 interface SearchResult {
   authors: AuthorSummary[];
