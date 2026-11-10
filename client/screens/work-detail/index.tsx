@@ -44,8 +44,8 @@ export default function WorkDetailScreen() {
   const [page, setPage] = useState(0);
   const [moreLoading, setMoreLoading] = useState(false);
 
-  // 巨型文集（如全唐诗）：目录走独立虚拟化组件 HugeCatalogList
-  const isHuge = (work?.poem_count ?? 0) > 3000;
+  // 目录渲染模式：普通 ScrollView（分页）或 HugeCatalogList（虚拟化 + 作者搜索）
+  const [dirMode, setDirMode] = useState<'loading' | 'huge' | 'normal'>('normal');
 
   const fetchEntries = useCallback(async (targetPage: number, append: boolean) => {
     if (!id) return;
@@ -71,8 +71,27 @@ export default function WorkDetailScreen() {
     useCallback(() => {
       if (tab !== '目录') return;
       if (!work) return;
-      if (!isHuge) fetchEntries(0, false);
-    }, [tab, work, isHuge, fetchEntries])
+      const poemCount = work?.poem_count ?? 0;
+      // 非巨型（≤3000 篇）一律走普通目录
+      if (poemCount <= 3000) {
+        setDirMode('normal');
+        fetchEntries(0, false);
+        return;
+      }
+      // 巨型文集需按真实卷数次定：仅当确实分成多卷时才用虚拟化目录
+      // （否则像「元曲」这类 volume 全为空、仅一个"未分卷"的大集合，也该走普通分页目录）
+      setDirMode('loading');
+      Api.get<{ catalog: { volume: string; count: number }[] }>(`/api/v1/works/${encodeURIComponent(work.id)}/catalog`)
+        .then((d) => {
+          const huge = (d.catalog ?? []).length > 1;
+          setDirMode(huge ? 'huge' : 'normal');
+          if (!huge) fetchEntries(0, false);
+        })
+        .catch(() => {
+          setDirMode('normal');
+          fetchEntries(0, false);
+        });
+    }, [tab, work, fetchEntries])
   );
 
   // 按卷分组（保持目录顺序）
@@ -98,11 +117,12 @@ export default function WorkDetailScreen() {
           }} />
         </>}
       </PageHeader>
-      {isHuge && tab === '目录' ? (
+      {dirMode === 'huge' && tab === '目录' ? (
         <HugeCatalogList workId={id} />
       ) : (
       <ScrollView style={p.scroll} contentContainerStyle={p.content} showsVerticalScrollIndicator={false}>
         {catalog.loading && <ActivityIndicator color={theme.primary} />}
+        {(dirMode === 'loading' && tab === '目录') && <ActivityIndicator color={theme.primary} style={p.card} />}
         {catalog.error && <Message retry={catalog.retry}>{catalog.error}</Message>}
         {catalog.data && !work && <Message>未找到这本文集</Message>}
         {work && <>
