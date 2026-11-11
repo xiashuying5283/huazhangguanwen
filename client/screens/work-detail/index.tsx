@@ -21,6 +21,46 @@ function isDramaTitle(title: string): boolean {
   return /・(?:楔子|第[一二三四五六七八九十百\d]+折)$/u.test(title);
 }
 
+/** 从折标题提取作品书名（去 "・楔子/第X折" 后缀） */
+function dramaBase(title: string): string {
+  return title.replace(/・(?:楔子|第[一二三四五六七八九十百\d]+折)$/u, '');
+}
+
+/** 目录行：普通篇目 或 折叠后的折子戏作品 */
+interface DirRow {
+  kind: 'poem' | 'drama';
+  poem?: WorkEntry;       // kind=poem 时
+  base?: string;          // kind=drama 时：书名（去折后缀）
+  firstId?: string;       // kind=drama 时：首选篇 id（用于进入作品概览）
+  actCount?: number;      // kind=drama 时：已收录折数
+}
+
+/** 把相邻同书名的折子戏连续条目折叠为单条"作品"，保持目录排列位置 */
+function collapseDrama(list: WorkEntry[]): DirRow[] {
+  const result: DirRow[] = [];
+  let i = 0;
+  while (i < list.length) {
+    const e = list[i];
+    const title = e.poems?.title || e.entry_title || '';
+    if (isDramaTitle(title)) {
+      const base = dramaBase(title);
+      const entries: WorkEntry[] = [e];
+      let j = i + 1;
+      while (j < list.length) {
+        const t2 = list[j].poems?.title || list[j].entry_title || '';
+        if (isDramaTitle(t2) && dramaBase(t2) === base) { entries.push(list[j]); j++; }
+        else break;
+      }
+      result.push({ kind: 'drama', base, firstId: e.poem_id, actCount: entries.length });
+      i = j;
+    } else {
+      result.push({ kind: 'poem', poem: e });
+      i++;
+    }
+  }
+  return result;
+}
+
 interface WorkEntry {
   id: string;
   volume: string | null;
@@ -155,16 +195,22 @@ export default function WorkDetailScreen() {
                   <Ink style={[p.flex, styles.volumeLabel]}>{(volumeGroups.get(volume) ?? []).length} 篇</Ink>
                   <Ionicons name={open === volume ? 'chevron-up-outline' : 'chevron-down-outline'} size={18} color={theme.primary} />
                 </Pressable>
-                {open === volume && (volumeGroups.get(volume) ?? []).map((entry) => (
-                  <Pressable key={entry.id} accessibilityRole="button" style={[p.row, styles.poem]} onPress={() => {
-                    const pid = entry.poems?.id as string | undefined;
-                    if (!pid) return;
-                    const title = entry.poems?.title || entry.entry_title || '';
-                    // 折子戏：标题形如 "书・楔子" / "书・第X折"，进入作品概览
-                    if (isDramaTitle(title)) router.push('/drama', { id: pid });
-                    else router.push('/read', { id: pid });
+                {open === volume && collapseDrama(volumeGroups.get(volume) ?? []).map((row) => row.kind === 'drama' ? (
+                  <Pressable key={`drama-${row.base}`} accessibilityRole="button" style={[p.row, styles.poem, styles.dramaRow]} onPress={() => {
+                    if (row.firstId) router.push('/drama', { id: row.firstId });
                   }}>
-                    <Ink style={p.flex}>{entry.entry_title || entry.poems?.title}</Ink>
+                    <View style={p.flex}>
+                      <Ink style={styles.dramaTitle}>{row.base}</Ink>
+                      <Ink style={styles.dramaActs}>杂剧 · 全 {row.actCount ?? 0} 折</Ink>
+                    </View>
+                    <Ionicons name="chevron-forward-outline" size={16} color={theme.primary} />
+                  </Pressable>
+                ) : (
+                  <Pressable key={row.poem!.id} accessibilityRole="button" style={[p.row, styles.poem]} onPress={() => {
+                    const pid = row.poem!.poems?.id as string | undefined;
+                    if (pid) router.push('/read', { id: pid });
+                  }}>
+                    <Ink style={p.flex}>{row.poem!.entry_title || row.poem!.poems?.title}</Ink>
                     <Ionicons name="chevron-forward-outline" size={16} color={theme.primary} />
                   </Pressable>
                 ))}
@@ -202,6 +248,9 @@ const styles = StyleSheet.create({
   volume: { minHeight: 57, justifyContent: 'center' },
   volumeLabel: { fontSize: 20 },
   poem: { paddingLeft: 19, minHeight: 44 },
+  dramaRow: { paddingVertical: 8, borderLeftWidth: 3, borderLeftColor: theme.primary, paddingLeft: 13 },
+  dramaTitle: { fontSize: 18, color: theme.primaryDeep, fontWeight: '600' },
+  dramaActs: { fontSize: 13, color: theme.muted, marginTop: 2 },
   more: { marginTop: 14, paddingVertical: 13, alignItems: 'center' },
   moreText: { color: theme.primary, fontSize: 16 },
 });
