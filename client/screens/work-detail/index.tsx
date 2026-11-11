@@ -16,6 +16,11 @@ import HugeCatalogList from './HugeCatalogList';
 const tabs = ['简介', '目录', '版本', '相关'] as const;
 const PAGE_SIZE = 500;
 
+/** 判断是否为折子戏一折：标题形如 "书名・楔子" 或 "书名・第X折" */
+function isDramaTitle(title: string): boolean {
+  return /・(?:楔子|第[一二三四五六七八九十百\d]+折)$/u.test(title);
+}
+
 interface WorkEntry {
   id: string;
   volume: string | null;
@@ -151,7 +156,14 @@ export default function WorkDetailScreen() {
                   <Ionicons name={open === volume ? 'chevron-up-outline' : 'chevron-down-outline'} size={18} color={theme.primary} />
                 </Pressable>
                 {open === volume && (volumeGroups.get(volume) ?? []).map((entry) => (
-                  <Pressable key={entry.id} accessibilityRole="button" style={[p.row, styles.poem]} onPress={() => entry.poems?.id && router.push('/read', { id: entry.poems.id })}>
+                  <Pressable key={entry.id} accessibilityRole="button" style={[p.row, styles.poem]} onPress={() => {
+                    const pid = entry.poems?.id as string | undefined;
+                    if (!pid) return;
+                    const title = entry.poems?.title || entry.entry_title || '';
+                    // 折子戏：标题形如 "书・楔子" / "书・第X折"，进入作品概览
+                    if (isDramaTitle(title)) router.push('/drama', { id: pid });
+                    else router.push('/read', { id: pid });
+                  }}>
                     <Ink style={p.flex}>{entry.entry_title || entry.poems?.title}</Ink>
                     <Ionicons name="chevron-forward-outline" size={16} color={theme.primary} />
                   </Pressable>

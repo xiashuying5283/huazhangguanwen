@@ -22,6 +22,10 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: theme.bgRoot },
         }}>
           <Stack.Screen name="(tabs)" options={{ title: '观文' }} />
+          <Stack.Screen name="drama" options={{ title: '作品' }} />
+          <Stack.Screen name="drama-act" options={{ title: '折' }} />
+          <Stack.Screen name="read" options={{ title: '诗文' }} />
+          <Stack.Screen name="work-detail" options={{ title: '文集' }} />
         </Stack>
         {ready && !data.welcomed && pathname === '/' && (
           <View style={styles.welcome}><Welcome automatic onClose={dismissWelcome} /></View>

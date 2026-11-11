@@ -214,6 +214,89 @@ router.get('/works/:id/entries', async (req, res) => {
   }
 });
 
+// ============ 折子戏 / 杂剧 ============
+
+// 某部杂剧（折子戏）的各 "折" 聚合：按目录条目 sort_order 排序返回
+// 前端从任一折的 poem 可拿到 base title（去 "・楔子/第X折" 后缀），再查整部
+// 也支持按任一折 poem_id 反查所属作品
+router.get('/dramas/by-poem/:poemId', async (req, res) => {
+  try {
+    const { poemId } = req.params;
+    const { data: poem, error: pe } = await client
+      .from('poems')
+      .select('title, author_id, work_id, genre, dynasty')
+      .eq('id', poemId).maybeSingle();
+    if (pe) throw new Error(pe.message);
+    if (!poem) return res.status(404).json({ error: '未找到该诗文' });
+
+    // 从标题剥离折标记获取基础标题
+    const base = String(poem.title || '').replace(/・(楔子|第[一二三四五六七八九十百\d]+折)$/u, '');
+    if (!base) return res.status(400).json({ error: '该作品不是折子戏' });
+
+    // 同一作品（work_id + title 前缀）下所有折
+    let qb = client
+      .from('poems')
+      .select('*, authors(id, name, dynasty, avatar_emoji), works(name)')
+      .eq('work_id', poem.work_id)
+      .ilike('title', `${base}・%`);
+    if (poem.genre === '杂剧' || poem.genre === '曲') {
+      // 兼容 genre 标记缺失：仍按前缀匹配即可
+    }
+
+    // 用目录条目确认排序
+    const { data: entries, error: ee } = await client
+      .from('collection_entries')
+      .select('poem_id, sort_order')
+      .ilike('entry_title', `${base}%`)
+      .order('sort_order', { ascending: true });
+    if (ee) throw new Error(ee.message);
+
+    const { data, error } = await qb.order('title', { ascending: true });
+    if (error) throw new Error(error.message);
+
+    // 按 sort_order 重塑折顺序（无目录条目的折排最后，按标题兜底）
+    const order = new Map((entries || []).map((entry, index) => [entry.poem_id, index]));
+    const acts = (data || []).slice().sort((a: any, b: any) => {
+      const ai = order.has(a.id) ? order.get(a.id)! : Number.MAX_SAFE_INTEGER;
+      const bi = order.has(b.id) ? order.get(b.id)! : Number.MAX_SAFE_INTEGER;
+      if (ai !== bi) return ai - bi;
+      return String(a.title).localeCompare(String(b.title), 'zh');
+    });
+
+    // 基础信息取自作品
+    const { data: work } = await client.from('works').select('name, description').eq('id', poem.work_id).maybeSingle();
+
+    res.json({
+      base_title: base,
+      genre: poem.genre || '曲',
+      dynasty: poem.dynasty,
+      author: poem.author_id ? (data?.[0]?.authors ?? null) : null,
+      work: work ?? null,
+      acts: acts.map((act: any) => ({
+        id: act.id,
+        title: act.title,
+        dynasty: act.dynasty,
+        genre: act.genre,
+        content: act.content,
+        content_traditional: act.content_traditional,
+        annotation: act.annotation,
+        translation: act.translation,
+        appreciation: act.appreciation,
+        creation_background: act.creation_background,
+        cover_emoji: act.cover_emoji,
+        background_hint: act.background_hint,
+        author_id: act.author_id,
+        author_name: act.authors?.name,
+        author_emoji: act.authors?.avatar_emoji,
+        work_id: act.work_id,
+        work_name: act.works?.name,
+      })),
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ============ 诗文 ============
 
 // 诗文列表（可筛选人物 / 作品）
