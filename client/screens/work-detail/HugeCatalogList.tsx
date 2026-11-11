@@ -5,6 +5,7 @@ import { useFocusEffect } from 'expo-router';
 import { Ink, Message, paperStyles as p } from '@/components/Paper';
 import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { Api } from '@/utils/api';
+import { routeForTitle } from '@/utils/drama';
 import { theme } from '@/theme';
 
 interface WorkEntry {
@@ -131,7 +132,7 @@ export default function HugeCatalogList({ workId }: { workId?: string }) {
                   key={entry.id}
                   accessibilityRole="button"
                   style={[p.row, styles.poem]}
-                  onPress={() => entry.poems?.id && router.push('/read', { id: entry.poems.id })}
+                  onPress={() => { if (entry.poems?.id) { const r = routeForTitle(entry.poems.title, entry.poems.id); router.push(r.path, { id: r.id }); } }}
                 >
                   <Ink style={p.flex}>{entry.entry_title || entry.poems?.title}</Ink>
                   <Ionicons name="chevron-forward-outline" size={16} color={theme.primary} />

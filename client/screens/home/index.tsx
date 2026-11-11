@@ -8,6 +8,7 @@ import { SearchModal } from '@/components/SearchModal';
 import { Api, hasBackend, type PoemDetail, type PoemSummary } from '@/utils/api';
 import { art, poemArt, topics } from '@/data/art';
 import { getDeviceId } from '@/utils/device';
+import { routeForTitle } from '@/utils/drama';
 import { theme } from '@/theme';
 
 const homeTopics = [topics[0], topics[2], topics[1], topics[3]];
@@ -46,7 +47,12 @@ export default function HomeScreen() {
   const { data, loading, error, retry } = useResource(load);
   const slides = data ? [data.daily, ...data.recommendations.filter((poem) => poem.id !== data.daily.id).slice(0, 3)] : [];
   const poem = slides[index] ?? slides[0];
-  const read = (id: string, play = false) => router.push('/read', { id, play });
+  const read = (id: string, play = false) => {
+    const title = poem?.title ?? '';
+    // 折子戏 → 作品概览页；普通诗文 → 阅读页
+    const r = routeForTitle(title, id);
+    router.push(r.path, { id: r.id, play });
+  };
 
   return (
     <Paper tab>

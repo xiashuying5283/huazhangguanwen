@@ -4,6 +4,7 @@ import { Avatar, BookCover, IconButton, Ink, Message, PageHeader, Paper, Segment
 import { toggleFavorite, useReadingShelf } from '@/contexts/ReadingShelf';
 import { poemArt } from '@/data/art';
 import { useSafeRouter } from '@/hooks/useSafeRouter';
+import { isDramaTitle } from '@/utils/drama';
 import { theme } from '@/theme';
 
 const tabs = ['诗文', '文集', '人物'] as const;
@@ -33,7 +34,11 @@ export default function FavoritesScreen() {
             const byline = kind === '文集' ? [favorite.item.era, favorite.item.author_name] :
               kind === '诗文' ? [favorite.item.dynasty, favorite.item.author_name] : [favorite.item.dynasty];
             return <View key={item.id} style={[p.row, p.divider, styles.row]}>
-              <Pressable accessibilityRole="button" style={[p.row, p.flex]} onPress={() => router.push(routes[kind], { id: item.id })}>
+              <Pressable accessibilityRole="button" style={[p.row, p.flex]} onPress={() => {
+                // 诗文收藏：折子戏进入作品概览页，其余按原路由
+                const target = (kind === '诗文' && isDramaTitle(name)) ? 'drama' : routes[kind];
+                router.push(target, { id: item.id });
+              }}>
                 {kind === '诗文' && <Image source={poemArt(name)} style={styles.circle} />}
                 {kind === '文集' && <BookCover name={name} width={58} height={78} />}
                 {kind === '人物' && <Avatar name={name} size={78} />}

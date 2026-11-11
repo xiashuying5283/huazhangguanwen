@@ -6,6 +6,7 @@ import { FontAwesome6 } from '@expo/vector-icons';
 import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { Api, hasBackend, type AuthorSummary, type PoemSummary, type WorkSummary } from '@/utils/api';
 import { getDeviceId } from '@/utils/device';
+import { routeForTitle } from '@/utils/drama';
 import { theme } from '@/theme';
 import { Avatar, BookCover, Ink } from '@/components/Paper';
 import { poemArt } from '@/data/art';
@@ -65,7 +66,8 @@ export function SearchModal({ visible, onClose }: Props) {
 
   const openPoem = (p: PoemSummary) => {
     if (hasBackend) void getDeviceId().then((deviceId) => Api.post('/api/v1/history', { device_id: deviceId, poem_id: p.id, action: 'search' })).catch(() => undefined);
-    router.push('/read', { id: p.id });
+    const r = routeForTitle(p.title, p.id);
+    router.push(r.path, { id: r.id });
     onClose();
   };
 

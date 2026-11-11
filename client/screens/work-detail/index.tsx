@@ -9,6 +9,7 @@ import { loadWorks } from '@/data/works';
 import { useResource } from '@/hooks/useResource';
 import { useSafeRouter, useSafeSearchParams } from '@/hooks/useSafeRouter';
 import { Api, hasBackend } from '@/utils/api';
+import { dramaBase, isDramaTitle } from '@/utils/drama';
 import { shareText } from '@/utils/share';
 import { theme } from '@/theme';
 import HugeCatalogList from './HugeCatalogList';
@@ -17,14 +18,7 @@ const tabs = ['简介', '目录', '版本', '相关'] as const;
 const PAGE_SIZE = 500;
 
 /** 判断是否为折子戏一折：标题形如 "书名・楔子" 或 "书名・第X折" */
-function isDramaTitle(title: string): boolean {
-  return /・(?:楔子|第[一二三四五六七八九十百\d]+折)$/u.test(title);
-}
-
-/** 从折标题提取作品书名（去 "・楔子/第X折" 后缀） */
-function dramaBase(title: string): string {
-  return title.replace(/・(?:楔子|第[一二三四五六七八九十百\d]+折)$/u, '');
-}
+// isDramaTitle 与 dramaBase 现统一引用自 @/utils/drama，此处删除本地重复定义
 
 /** 目录行：普通篇目 或 折叠后的折子戏作品 */
 interface DirRow {

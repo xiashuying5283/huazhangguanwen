@@ -11,6 +11,7 @@ import { Api, hasBackend, type AuthorSummary, type Paged, type PoemSummary, type
 import { getDeviceId } from '@/utils/device';
 import { loadWorks } from '@/data/works';
 import { poemArt, workType } from '@/data/art';
+import { routeForTitle } from '@/utils/drama';
 import { shareText } from '@/utils/share';
 import { theme } from '@/theme';
 
@@ -75,7 +76,8 @@ export default function LibraryScreen() {
   const openWork = (w: WorkSummary) => router.push('/work-detail', { id: w.id });
   const openPoem = (poem: PoemSummary) => {
     if (hasBackend) void getDeviceId().then((deviceId) => Api.post('/api/v1/history', { device_id: deviceId, poem_id: poem.id, action: 'search' })).catch(() => undefined);
-    router.push('/read', { id: poem.id });
+    const r = routeForTitle(poem.title, poem.id);
+    router.push(r.path, { id: r.id });
   };
 
   const hasResult = searchRes && (searchRes.authors.length || searchRes.works.length || searchRes.poems.length);

@@ -3,6 +3,7 @@ import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { useSafeRouter } from '@/hooks/useSafeRouter';
 import type { PoemSummary } from '@/utils/api';
+import { routeForTitle } from '@/utils/drama';
 import { theme } from '@/theme';
 import { Ink } from '@/components/Paper';
 import { poemArt } from '@/data/art';
@@ -15,7 +16,7 @@ export const PoemCard = memo(function PoemCard({ poem }: { poem: PoemSummary }) 
   const router = useSafeRouter();
   const stamp = poemArt(poem.title);
   return (
-    <Pressable onPress={() => router.push('/read', { id: poem.id })} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
+    <Pressable onPress={() => { const r = routeForTitle(poem.title, poem.id); router.push(r.path, { id: r.id }); }} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <Image source={stamp} style={styles.thumb} />
       <View style={styles.body}>
         <View style={styles.topRow}>
