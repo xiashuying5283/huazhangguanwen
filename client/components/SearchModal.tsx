@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator, Image, Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
@@ -6,7 +6,7 @@ import { FontAwesome6 } from '@expo/vector-icons';
 import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { Api, hasBackend, type AuthorSummary, type PoemSummary, type WorkSummary } from '@/utils/api';
 import { getDeviceId } from '@/utils/device';
-import { routeForTitle } from '@/utils/drama';
+import { collapseDramas, routeForTitle } from '@/utils/drama';
 import { theme } from '@/theme';
 import { Avatar, BookCover, Ink } from '@/components/Paper';
 import { poemArt } from '@/data/art';
@@ -81,6 +81,12 @@ export function SearchModal({ visible, onClose }: Props) {
     onClose();
   };
 
+  // 搜索结果中将同一剧目的折子聚合为单条"剧作"，点进作品概览页再选折子
+  const aggregated = useMemo<{ dramas: { base: string; firstId: string; actCount: number; author?: string | null }[]; poems: PoemSummary[] } | null>(
+    () => (result ? collapseDramas<PoemSummary>(result.poems) : null),
+    [result],
+  );
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
@@ -135,9 +141,19 @@ export function SearchModal({ visible, onClose }: Props) {
                   ))}
                 </ResultGroup>
               ) : null}
-              {result.poems.length > 0 ? (
+              {aggregated && (aggregated.poems.length > 0 || aggregated.dramas.length > 0) ? (
                 <ResultGroup title="诗文">
-                  {result.poems.map((p) => (
+                  {aggregated.dramas.map((d) => (
+                    <Pressable key={`drama-${d.base}`} style={styles.row} onPress={() => { if (d.firstId) router.push('/drama', { id: d.firstId }); onClose(); }}>
+                      <Image source={poemArt(d.base)} style={{ width: 42, height: 42, borderRadius: 21 }} />
+                      <View style={styles.rowInfo}>
+                        <Ink style={styles.rowTitle} numberOfLines={1}>{d.base}</Ink>
+                        <Text style={styles.rowMeta} numberOfLines={1}>{`杂剧 · 全 ${d.actCount} 折${d.author ? ' · ' + d.author : ''}`}</Text>
+                      </View>
+                      <Text style={styles.chevron}>›</Text>
+                    </Pressable>
+                  ))}
+                  {aggregated.poems.map((p) => (
                     <Pressable key={p.id} style={styles.row} onPress={() => openPoem(p)}>
                       <Image source={poemArt(p.title)} style={{ width: 42, height: 42, borderRadius: 21 }} />
                       <View style={styles.rowInfo}>

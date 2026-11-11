@@ -28,3 +28,35 @@ export function actLabel(title: string): string {
 export function routeForTitle(title: string, id: string): { path: 'drama' | 'read'; id: string } {
   return isDramaTitle(title) ? { path: 'drama', id } : { path: 'read', id };
 }
+
+/** 搜索结果中聚合后的剧作条目 */
+export interface DramaHit {
+  base: string;       // 剧名（去折后缀）
+  firstId: string;    // 任选一折 id（进 /drama 概览页用，后端会均衡排序）
+  actCount: number;   // 已收录折数
+  author?: string | null;
+}
+
+/**
+ * 把搜索结果/列表中的折子按剧名折叠为单条"剧作"，用于"搜剧名只出现一条作品"。
+ * items 需含 id/title/author_name。
+ */
+export function collapseDramas<T extends { id: string; title: string; author_name?: string | null }>(
+  items: T[],
+): { dramas: DramaHit[]; poems: T[] } {
+  const dramas: DramaHit[] = [];
+  const poems: T[] = [];
+  const seen = new Set<string>();
+  for (const it of items) {
+    if (isDramaTitle(it.title)) {
+      const base = dramaBase(it.title);
+      if (seen.has(base)) continue;
+      seen.add(base);
+      const actCount = items.filter((x) => isDramaTitle(x.title) && dramaBase(x.title) === base).length;
+      dramas.push({ base, firstId: it.id, actCount, author: it.author_name });
+    } else {
+      poems.push(it);
+    }
+  }
+  return { dramas, poems };
+}

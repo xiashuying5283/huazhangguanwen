@@ -11,7 +11,7 @@ import { Api, hasBackend, type AuthorSummary, type Paged, type PoemSummary, type
 import { getDeviceId } from '@/utils/device';
 import { loadWorks } from '@/data/works';
 import { poemArt, workType } from '@/data/art';
-import { routeForTitle } from '@/utils/drama';
+import { collapseDramas, routeForTitle } from '@/utils/drama';
 import { shareText } from '@/utils/share';
 import { theme } from '@/theme';
 
@@ -80,8 +80,6 @@ export default function LibraryScreen() {
     router.push(r.path, { id: r.id });
   };
 
-  const hasResult = searchRes && (searchRes.authors.length || searchRes.works.length || searchRes.poems.length);
-
   return (
     <Paper tab scene="mountain">
       <PageHeader title="文库"><IconButton icon="share-social-outline" label="分享文库" onPress={shareLibrary} /></PageHeader>
@@ -102,6 +100,11 @@ export default function LibraryScreen() {
 
         {searching ? (
           <>
+            {/* 搜索结果：将同一剧目的折子聚合为单条"剧作" */}
+            {(() => {
+              const agg = searchRes ? collapseDramas(searchRes.poems) : undefined;
+              const hasResult = searchRes && (searchRes.authors.length || searchRes.works.length || (agg && (agg.poems.length || agg.dramas.length)));
+              return (<>
             {searchLoading && <ActivityIndicator color={theme.primary} style={styles.status} />}
             {!searchLoading && searchError && <Message>{searchError ? '搜索暂时不可用，请稍后再试' : ''}</Message>}
             {searchRes && !searchLoading && !hasResult && <Ink style={styles.empty}>没有找到“{kw.trim()}”相关的内容</Ink>}
@@ -133,10 +136,18 @@ export default function LibraryScreen() {
                     ))}
                   </View>
                 )}
-                {searchRes.poems.length > 0 && (
+                {agg && (agg.dramas.length > 0 || agg.poems.length > 0) && (
                   <View style={styles.card}>
                     <Ink style={styles.sectionTitle}>诗文</Ink>
-                    {searchRes.poems.map((poem) => (
+                    {agg.dramas.map((d) => (
+                      <Pressable key={`drama-${d.base}`} style={styles.row} accessibilityRole="button" onPress={() => { if (d.firstId) router.push('/drama', { id: d.firstId }); }}>
+                        <Image source={poemArt(d.base)} style={{ width: 42, height: 42, borderRadius: 21 }} />
+                        <View style={p.flex}><Ink style={styles.rowTitle} numberOfLines={1}>{d.base}</Ink>
+                        <Ink style={styles.rowMeta} numberOfLines={1}>{`杂剧 · 全 ${d.actCount} 折${d.author ? ' · ' + d.author : ''}`}</Ink></View>
+                        <Ionicons name="chevron-forward-outline" size={16} color={theme.primary} />
+                      </Pressable>
+                    ))}
+                    {agg.poems.map((poem) => (
                       <Pressable key={poem.id} style={styles.row} accessibilityRole="button" onPress={() => openPoem(poem)}>
                         <Image source={poemArt(poem.title)} style={{ width: 42, height: 42, borderRadius: 21 }} />
                         <View style={p.flex}><Ink style={styles.rowTitle} numberOfLines={1}>{poem.title}</Ink>
@@ -148,6 +159,8 @@ export default function LibraryScreen() {
                 )}
               </>
             )}
+              </>);
+            })()}
           </>
         ) : (
           <>
