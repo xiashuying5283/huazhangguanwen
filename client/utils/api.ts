@@ -55,14 +55,18 @@ export interface PoemSummary {
 
 export interface PinyinChar { c: string; p: string }
 
+export type EditorialSource = { title: string; url: string };
+
 export interface PoemDetail extends PoemSummary {
   content_traditional?: string | null;
   pinyin?: PinyinChar[][];
   annotation?: string | null;
+  annotation_notes?: import('@/utils/inlineAnnotations').AnchoredAnnotation[] | null;
   translation?: string | null;
   appreciation?: string | null;
   read_count?: number;
   creation_background?: string | null;
+  background_source?: EditorialSource;
 }
 
 export interface Relationship {
@@ -75,4 +79,7 @@ export interface AuthorDetail extends AuthorSummary {
   works: WorkSummary[];
   poems: PoemSummary[];
   relationships: Relationship[];
+  evaluation?: string;
+  timeline?: { year: string; event: string }[];
+  editorial_sources?: EditorialSource[];
 }

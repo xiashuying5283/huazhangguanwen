@@ -16,6 +16,12 @@ export function Ink({ style, ...props }: TextProps) {
   return <Text {...props} style={[styles.ink, style]} />;
 }
 
+export function GenreTag({ label }: { label: string }) {
+  return <View style={styles.genreTag}>
+    <Ink style={styles.genreLabel}>{label}</Ink>
+  </View>;
+}
+
 export function Paper({ children, tab = false, scene, warm = false }: {
   children: ReactNode;
   tab?: boolean;
@@ -53,13 +59,14 @@ export function IconButton({ icon, label, onPress, color = theme.ink, size = 23 
   );
 }
 
-export function PageHeader({ title, back, centered, children, caption, fallback = '/' }: {
+export function PageHeader({ title, back, centered, children, caption, fallback = '/', onBack }: {
   title?: string; back?: boolean; centered?: boolean; children?: ReactNode; caption?: string; fallback?: string;
+  onBack?: () => void;
 }) {
   const router = useSafeRouter();
   return (
     <View style={styles.header}>
-      {back && <IconButton icon="chevron-back-outline" label="返回" onPress={() => router.canGoBack() ? router.back() : router.replace(fallback)} />}
+      {back && <IconButton icon="chevron-back-outline" label="返回" onPress={onBack ?? (() => router.canGoBack() ? router.back() : router.replace(fallback))} />}
       <View pointerEvents="none" style={centered ? styles.centeredTitle : styles.heading}>
         <Ink accessibilityRole={title ? 'header' : undefined} style={[styles.title, centered && styles.smallTitle]}>{title}</Ink>
         {caption && <Ink style={styles.caption}>{caption}</Ink>}
@@ -75,7 +82,7 @@ export function Segments<T extends string>({ options, value, onChange, pills = f
   return (
     <View style={[styles.segments, pills && styles.pills]}>
       {options.map((option) => (
-        <Pressable key={option} accessibilityRole="tab" accessibilityState={{ selected: value === option }} onPress={() => onChange(option)}
+        <Pressable key={option} accessibilityRole="tab" aria-selected={value === option} onPress={() => onChange(option)}
           style={[styles.segment, pills && styles.pill, pills && value === option && styles.activePill]}>
           <Ink style={[styles.segmentText, value === option && styles.activeText, pills && value === option && styles.white]}>{option}</Ink>
           {!pills && value === option && <View style={styles.underline} />}
@@ -111,6 +118,7 @@ export function Message({ children, retry }: { children: ReactNode; retry?: () =
 }
 
 export const paperStyles = StyleSheet.create({
+  annotationLink: { color: theme.primaryDeep, backgroundColor: 'rgba(98,107,77,0.09)' },
   scroll: { flex: 1 },
   content: { paddingHorizontal: 18, paddingBottom: 24 },
   card: { backgroundColor: 'rgba(255,250,241,0.48)', borderRadius: 15, overflow: 'hidden' },
@@ -124,6 +132,8 @@ export const paperStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  genreTag: { flexShrink: 0, alignSelf: 'center', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 8, backgroundColor: 'rgba(98,107,77,0.09)' },
+  genreLabel: { fontSize: 11, lineHeight: 15, color: theme.primaryDeep },
   sheet: { paddingTop: Platform.OS === 'web' ? 24 : 0 },
   ink: { color: theme.ink, fontFamily: displayFont, fontSize: 17 },
   fullImage: { width: '100%', height: '100%' },

@@ -19,6 +19,8 @@ export interface DramaAct {
   annotation?: string | null;
   translation?: string | null;
   appreciation?: string | null;
+  creation_background?: string | null;
+  annotation_notes?: import('@/utils/inlineAnnotations').AnchoredAnnotation[] | null;
   cover_emoji?: string | null;
   background_hint?: string | null;
   author_id?: string | null;
@@ -71,7 +73,7 @@ export default function DramaScreen() {
   const { data, error, loading, retry } = useResource(load);
 
   const first = data?.acts[0];
-  const favorite = !!data && shelf.data.favorites.some((item) => item.kind === '诗文' && item.item.id === data.base_title);
+  const favorite = !!data && shelf.data.favorites.some((item) => item.kind === '诗文' && data.acts.some((act) => act.id === item.item.id));
   const titleLines = data ? splitTitle(data.base_title) : [];
 
   const record = (act: DramaAct) => {
@@ -86,7 +88,7 @@ export default function DramaScreen() {
     openAct(first.id);
   };
   const toggleCollection = () => {
-    if (!data) return;
+    if (!data || !first) return;
     toggleFavorite({ kind: '诗文', item: asSummary(first ?? data.acts[0]) });
   };
 
@@ -104,7 +106,7 @@ export default function DramaScreen() {
             {titleLines.map((line, idx) => (
               <Ink key={idx} accessibilityRole="header" style={styles.title}>{line}</Ink>
             ))}
-            <Ink style={styles.byline}>元杂剧 · {data.author?.name ?? (data.acts[0]?.author_name ?? '佚名')}</Ink>
+            <Ink style={styles.byline}>{data.dynasty} · {data.author?.name ?? (data.acts[0]?.author_name ?? '佚名')}</Ink>
             <Ink style={styles.intro}>{buildIntro(data.acts)}</Ink>
             <Pressable accessibilityRole="button" disabled={!first} onPress={startReading}
               style={({ pressed }) => [styles.start, pressed && styles.pressed]}>

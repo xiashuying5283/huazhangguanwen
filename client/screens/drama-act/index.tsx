@@ -1,21 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Ink, Message, PageHeader, Paper, paperStyles as p } from '@/components/Paper';
 import { DialogRow, PaperDialog } from '@/components/PaperDialog';
-import { recordRead, setPreferences, toggleFavorite, useReadingShelf } from '@/contexts/ReadingShelf';
+import { recordRead, setPreferences, useReadingShelf } from '@/contexts/ReadingShelf';
 import { useResource } from '@/hooks/useResource';
 import { useSafeRouter, useSafeSearchParams } from '@/hooks/useSafeRouter';
 import { Api, hasBackend, type PoemDetail } from '@/utils/api';
 import { getDeviceId } from '@/utils/device';
 import { asSummary, summaryFor, type DramaDetail } from '@/screens/drama';
+import { ReadingBody } from '@/components/ReadingBody';
+import { ReadingAnalysis, AnalysisSection } from '@/components/ReadingAnalysis';
+import { prepareReading } from '@/utils/readingLayout';
+import { annotationMatcher, parseInlineAnnotations, type InlineAnnotation } from '@/utils/inlineAnnotations';
 import { theme } from '@/theme';
 
-const tabs = ['注释', '译文', '赏析'] as const;
+const tabs = ['注释', '译文', '赏析', '创作背景'] as const;
 type Tab = (typeof tabs)[number];
-
-/** 折正文分块：区分曲牌、科介、唱/台词。每块为 { kind, cue, text } */
-type Block = { kind: 'stage' | 'verse' | 'prose'; cue: string; text: string };
 
 export default function DramaActScreen() {
   const router = useSafeRouter();
@@ -24,7 +25,7 @@ export default function DramaActScreen() {
   const shelf = useReadingShelf();
   const { traditional, fontSize } = shelf.data.preferences;
   const [scene, setScene] = useState<'directory' | 'settings'>();
-  const [fromOverview, setFromOverview] = useState(false);
+  const [wordNote, setWordNote] = useState<InlineAnnotation>();
 
   const loadAct = useCallback(() => id ? Api.get<PoemDetail>(`/api/v1/poems/${encodeURIComponent(id)}`) : Promise.reject(new Error('缺少折信息')), [id]);
   const { data: act, error, loading, retry } = useResource(loadAct);
@@ -38,20 +39,18 @@ export default function DramaActScreen() {
   const next = drama.data ? drama.data.acts[index + 1] : undefined;
   const alone = drama.data?.acts.length === 1;
 
-  const favorite = !!act && shelf.data.favorites.some((item) => item.kind === '诗文' && item.item.id === act?.id);
-
   useEffect(() => {
     if (!act) return;
     recordRead(asSummary({ ...act, genre: act.genre || '曲', dynasty: act.dynasty || '' }));
     if (hasBackend && act.work_id) void getDeviceId().then((deviceId) => Api.post('/api/v1/history', { device_id: deviceId, poem_id: act.id, action: 'read' })).catch(() => undefined);
   }, [act]);
 
-  const raw = act ? (traditional && act.content_traditional ? act.content_traditional : act.content) : '';
-  const blocks = useMemo(() => parseBlocks(raw), [raw]);
+  const layout = useMemo(() => act ? prepareReading(act, traditional) : undefined,[act,traditional]);
+  const reference = useMemo(() => act && traditional ? prepareReading(act,false) : undefined,[act,traditional]);
+  const matchAnnotations = useMemo(() => annotationMatcher(parseInlineAnnotations(act?.annotation),act?.annotation_notes),[act]);
 
   const goAct = (actId: string) => {
     setScene(undefined);
-    setFromOverview(false);
     setTab('注释');
     router.replace('/drama-act', { id: actId });
   };
@@ -72,19 +71,13 @@ export default function DramaActScreen() {
             <Ink style={styles.chapterSummary}>{drama.data?.author?.name ?? ''}</Ink>
           </View>
           <View style={styles.readArea}>
-            {blocks.length === 0 && <Ink style={styles.bodyText}>{raw}</Ink>}
-            {blocks.map((block, i) => <ScriptBlock key={i} block={block} fontSize={fontSize} />)}
+            {layout && <ReadingBody layout={layout} size={fontSize} referenceLayout={reference} matchAnnotations={matchAnnotations} onAnnotation={setWordNote} onAnchor={() => undefined} />}
           </View>
           <View style={styles.end}>
             <Ink style={styles.endLabel}>{act.title}完</Ink>
-            <View style={[p.card, styles.analysis]}>
-              <Segments tabs={tabs} value={tab} onChange={setTab} />
-              <View style={styles.analysisBody}>
-                {tab === '注释' ? <AnnoText text={act.annotation} /> : null}
-                {tab === '译文' && <Ink style={styles.analysisText}>{act.translation?.trim() || '暂未收录译文'}</Ink>}
-                {tab === '赏析' && <Ink style={styles.analysisText}>{act.appreciation?.trim() || '暂未收录赏析'}</Ink>}
-              </View>
-            </View>
+            <ReadingAnalysis tab={tab} onChange={setTab}>
+              <AnalysisSection>{(tab === '注释' ? act.annotation : tab === '译文' ? act.translation : tab === '赏析' ? act.appreciation : act.creation_background)?.trim() || `暂未收录${tab}`}</AnalysisSection>
+            </ReadingAnalysis>
           </View>
         </>}
       </ScrollView>
@@ -93,6 +86,7 @@ export default function DramaActScreen() {
         <FooterButton title="目录" icon="list-outline" onPress={() => setScene('directory')} />
         <FooterButton title="下一折" icon="chevron-forward-outline" disabled={!next || alone} onPress={() => next && goAct(next.id)} />
       </View>
+      {wordNote && <PaperDialog title={wordNote.word} onClose={() => setWordNote(undefined)}><AnalysisSection>{wordNote.explanation}</AnalysisSection></PaperDialog>}
       {scene === 'directory' && drama.data && (
         <PaperDialog title="作品目录" onClose={() => setScene(undefined)}>
           {drama.data.acts.map((item) => (
@@ -112,75 +106,6 @@ export default function DramaActScreen() {
       )}
     </Paper>
   );
-}
-
-function Segments<T extends string>({ tabs, value, onChange }: { tabs: readonly T[]; value: T; onChange: (v: T) => void }) {
-  return (
-    <View style={styles.segments}>
-      {tabs.map((option) => (
-        <Pressable key={option} accessibilityRole="tab" accessibilityState={{ selected: value === option }} onPress={() => onChange(option)}
-          style={[styles.segment, value === option && styles.activeSegment]}>
-          <Ink style={[styles.segmentText, value === option && styles.activeText]}>{option}</Ink>
-        </Pressable>
-      ))}
-    </View>
-  );
-}
-
-function AnnoText({ text }: { text?: string | null }) {
-  const lines = (text?.trim() ? text : '暂未收录注释').split(/\n/);
-  return <View>{lines.map((line, i) => <Ink key={i} style={styles.analysisText}>{line}</Ink>)}</View>;
-}
-
-/** 把折正文解析为 [{kind,cue,text}]：科介（…）/曲牌【…】/唱词*/
-function parseBlocks(content: string): Block[] {
-  const out: Block[] = [];
-  const text = content.replace(/\r/g, '');
-  const full = text.split(/\n+/u).map((line) => line.trim()).filter(Boolean);
-  for (let i = 0; i < full.length; i++) {
-    const line = full[i];
-    const stage = line.startsWith('（') ? 1 : 0;
-    if (stage) {
-      // 科介（可能跨行不完整，直接整段）
-      out.push({ kind: 'stage', cue: '', text: line });
-      continue;
-    }
-    const tune = /^【(.*?)】/u.exec(line);
-    if (tune) {
-      // 曲牌行：其后跟若干唱词行直到下一曲牌/科介
-      const cue = tune[1];
-      const first = line.slice(tune[0].length).trim();
-      const bodyLines: string[] = [];
-      if (first) bodyLines.push(first);
-      let j = i + 1;
-      while (j < full.length && !full[j].startsWith('【') && !full[j].startsWith('（')) {
-        bodyLines.push(full[j]); j++;
-      }
-      out.push({ kind: 'verse', cue, text: bodyLines.join('\n') });
-      i = j - 1;
-      continue;
-    }
-    out.push({ kind: 'prose', cue: '', text: line });
-  }
-  return out;
-}
-
-function ScriptBlock({ block, fontSize }: { block: Block; fontSize: number }) {
-  if (block.kind === 'stage') {
-    return <Ink style={styles.stage}>{block.text}</Ink>;
-  }
-  if (block.kind === 'verse') {
-    return (
-      <View style={styles.verse}>
-        <Ink style={styles.tune}>〔{block.cue}〕</Ink>
-        {block.text.split('\n').map((line, i) => (
-          <Ink key={i} style={[styles.bodyText, { fontSize, lineHeight: Math.round(fontSize * 1.7), letterSpacing: 1.5 }]}>{line}</Ink>
-        ))}
-      </View>
-    );
-  }
-  // 宾白
-  return <Ink style={[styles.bodyText, { fontSize, lineHeight: Math.round(fontSize * 1.7) }]}>{block.text}</Ink>;
 }
 
 function FooterButton({ title, icon, disabled, onPress }: {

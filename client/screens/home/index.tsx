@@ -48,10 +48,9 @@ export default function HomeScreen() {
   const slides = data ? [data.daily, ...data.recommendations.filter((poem) => poem.id !== data.daily.id).slice(0, 3)] : [];
   const poem = slides[index] ?? slides[0];
   const read = (id: string, play = false) => {
-    const title = poem?.title ?? '';
-    // 折子戏 → 作品概览页；普通诗文 → 阅读页
-    const r = routeForTitle(title, id);
-    router.push(r.path, { id: r.id, play });
+    const title = [...slides, ...(data?.recommendations ?? [])].find((item) => item.id === id)?.title ?? '';
+    const route = routeForTitle(title, id);
+    router.push(route.path, { id, play });
   };
 
   return (

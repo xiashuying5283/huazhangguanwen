@@ -126,7 +126,7 @@ push(() => bookList(`${CWD}/四书五经/zhongyong.json`, '子思'));
 /* ---- 幽梦影 ---- */
 push(() =>
   readJson(`${CWD}/幽梦影/youmengying.json`).map((e: any, i: number) => ({
-    author: '张潮', dynasty: '清代', genre: '文',
+    author: '张潮', dynasty: '清代', genre: '小品',
     title: `幽梦影 · 第${i + 1}则`,
     paragraphs: [String(e.content ?? '')],
   }))

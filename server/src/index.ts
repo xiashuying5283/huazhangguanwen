@@ -4,7 +4,7 @@ import contentRouter from "./routes/content.js";
 import aiRouter from "./routes/ai.js";
 
 const app = express();
-const port = process.env.PORT || 9091;
+const port = Number(process.env.PORT || 9091);
 
 // Middleware
 app.use(cors());
@@ -19,6 +19,6 @@ app.get('/api/v1/health', (req, res) => {
 app.use('/api/v1', contentRouter);
 app.use('/api/v1', aiRouter);
 
-app.listen(port, () => {
+app.listen({ port, host: process.env.SERVER_HOST }, () => {
   console.log(`Server listening at http://localhost:${port}/`);
 });

@@ -16,7 +16,7 @@ export const PoemCard = memo(function PoemCard({ poem }: { poem: PoemSummary }) 
   const router = useSafeRouter();
   const stamp = poemArt(poem.title);
   return (
-    <Pressable onPress={() => { const r = routeForTitle(poem.title, poem.id); router.push(r.path, { id: r.id }); }} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
+    <Pressable onPress={() => { const route = routeForTitle(poem.title, poem.id); router.push(route.path, { id: route.id }); }} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <Image source={stamp} style={styles.thumb} />
       <View style={styles.body}>
         <View style={styles.topRow}>
