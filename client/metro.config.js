@@ -34,7 +34,8 @@ config.resolver.blockList = [
 
 const DEFAULT_BACKEND_PORT = '9091';
 const BACKEND_PORT = process.env.SERVER_PORT || DEFAULT_BACKEND_PORT;
-const BACKEND_TARGET = `http://localhost:${BACKEND_PORT}`;
+const BACKEND_HOST = process.env.SERVER_HOST || 'localhost';
+const BACKEND_TARGET = `http://${BACKEND_HOST}:${BACKEND_PORT}`;
 
 const apiProxy = createProxyMiddleware({
   target: BACKEND_TARGET,

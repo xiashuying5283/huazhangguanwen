@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { authorId } from '../data/databaseCapabilities';
+import { saveMissingAnalysis } from '../ai/saveAnalysis';
 import { getSupabaseClient } from '../storage/database/supabase-client';
 import { generateBio, generateContent, HeaderUtils } from '../ai/llm';
 
@@ -19,21 +21,29 @@ async function runOnce<T>(key: string, fn: () => Promise<T>): Promise<T> {
 router.post('/ai/bio', async (req, res) => {
   const headers = HeaderUtils.extractForwardHeaders(req.headers as unknown as Record<string, string>);
   try {
-    const { author_id } = req.body || {};
-    if (!author_id) return res.status(400).json({ error: '缺少 author_id' });
+    const requestedId = req.body?.author_id;
+    if (!requestedId) return res.status(400).json({ error: '缺少 author_id' });
+    const author_id = await authorId(client, requestedId);
 
-    const { data: author } = await client
+    const { data: author, error: readError } = await client
       .from('authors').select('id, name, dynasty, bio').eq('id', author_id).maybeSingle();
+    if (readError) throw readError;
     if (!author) return res.status(404).json({ error: '作者不存在' });
     if (author.bio && author.bio.trim()) return res.json({ ok: true, cached: true, bio: author.bio });
 
     const extra = `在有可靠史料的前提下，可结合其代表作类型书写；朝代：${author.dynasty}。`;
-    const bio = await runOnce(`bio:${author_id}`, () =>
-      generateBio(author.name, author.dynasty || '不详', extra, headers));
-
-    const trimmed = bio.trim();
-    await client.from('authors').update({ bio: trimmed }).eq('id', author_id);
-    res.json({ ok: true, cached: false, bio: trimmed });
+    const bio = await runOnce(`bio:${author_id}`, async () => {
+      const generated = (await generateBio(author.name, author.dynasty || '不详', extra, headers)).trim();
+      if (!generated) throw new Error('生平生成结果为空，请重试');
+      let write = client.from('authors').update({ bio: generated }).eq('id', author_id);
+      write = author.bio === null ? write.is('bio', null) : write.eq('bio', author.bio);
+      const { error: writeError } = await write;
+      if (writeError) throw writeError;
+      const { data: saved, error: savedError } = await client.from('authors').select('bio').eq('id', author_id).single();
+      if (savedError) throw savedError;
+      return saved.bio;
+    });
+    res.json({ ok: true, cached: false, bio });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
@@ -46,23 +56,22 @@ router.post('/ai/analysis', async (req, res) => {
     const { poem_id } = req.body || {};
     if (!poem_id) return res.status(400).json({ error: '缺少 poem_id' });
 
-    const { data: poem } = await client
+    const { data: poem, error: readError } = await client
       .from('poems')
       .select('id, title, dynasty, genre, content, annotation, translation, appreciation, authors(name)')
       .eq('id', poem_id).maybeSingle();
+    if (readError) throw readError;
     if (!poem) return res.status(404).json({ error: '诗文不存在' });
-    if (poem.annotation && poem.translation && poem.appreciation) {
+    if (poem.annotation?.trim() && poem.translation?.trim() && poem.appreciation?.trim()) {
       return res.json({ ok: true, cached: true, annotation: poem.annotation, translation: poem.translation, appreciation: poem.appreciation });
     }
 
-    const result = await runOnce(`analysis:${poem_id}`, () =>
-      generateContent(poem.title, poem.authors?.[0]?.name || '佚名', poem.dynasty, poem.content, headers));
-
-    const annotation = result.annotation || null;
-    const translation = result.translation || null;
-    const appreciation = result.appreciation || null;
-    await client.from('poems').update({ annotation, translation, appreciation }).eq('id', poem_id);
-    res.json({ ok: true, cached: false, annotation, translation, appreciation });
+    const result = await runOnce(`analysis:${poem_id}`, async () => {
+      const author = Array.isArray(poem.authors) ? poem.authors[0] : poem.authors;
+      const generated = await generateContent(poem.title, author?.name || '佚名', poem.dynasty, poem.content, headers);
+      return saveMissingAnalysis(client, poem_id, generated);
+    });
+    res.json({ ok: true, cached: false, ...result });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

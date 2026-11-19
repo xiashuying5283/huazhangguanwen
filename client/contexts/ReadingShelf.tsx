@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useSyncExternalStore } from 'react';
+export type DramaPosition = { actId: string; paragraph: number };
 import type { AuthorSummary, PoemSummary, WorkSummary } from '@/utils/api';
 
 type Favorite =
@@ -20,12 +21,13 @@ type Shelf = {
   notes: { poem: PoemSummary; text: string }[];
   history: PoemSummary[];
   readingDays: string[];
+  dramaProgress: Record<string, DramaPosition>;
   preferences: ReadingPreferences;
 };
 
 const STORAGE_KEY = 'guanwen_reading_shelf_v1';
 const defaults: Shelf = {
-  welcomed: false, favorites: [], notes: [], history: [], readingDays: [],
+  welcomed: false, favorites: [], notes: [], history: [], readingDays: [], dramaProgress: {},
   preferences: { pinyin: false, traditional: false, fontSize: 23, paper: '宣纸' },
 };
 let snapshot = { data: defaults, ready: false, storageError: false };
@@ -49,6 +51,7 @@ function hydrate() {
 function update(change: (data: Shelf) => Shelf) {
   void hydrate().then(() => {
     const data = change(snapshot.data);
+    if (data === snapshot.data) return;
     publish({ ...snapshot, data });
     writes = writes.then(() => AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data)))
       .then(() => {
@@ -89,6 +92,14 @@ export function recordRead(poem: PoemSummary) {
     history: [poem, ...data.history.filter(({ id }) => id !== poem.id)].slice(0, 100),
     readingDays: Array.from(new Set([...data.readingDays, day])),
   }));
+}
+
+export function saveDramaPosition(id: string, position: DramaPosition) {
+  update((data) => {
+    const previous = data.dramaProgress[id];
+    if (previous?.actId === position.actId && previous.paragraph === position.paragraph) return data;
+    return { ...data, dramaProgress: { ...data.dramaProgress, [id]: position } };
+  });
 }
 
 export function setNote(poem: PoemSummary, text: string) {

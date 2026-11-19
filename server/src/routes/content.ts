@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { authorId, cached, missingFunction } from '../data/databaseCapabilities';
+import { authorContexts, workContexts } from '../data/readingEditorial';
 import { getSupabaseClient } from '../storage/database/supabase-client';
 
 const router: Router = Router();
@@ -20,6 +22,22 @@ interface PoemPage {
 async function listPoems(query: {
   author_id?: string; work_id?: string; q?: string; limit?: number; offset?: number;
 }): Promise<PoemPage> {
+  if (query.author_id) query.author_id = await authorId(client, query.author_id);
+  if (query.work_id) {
+    const limit = Math.min(Math.max(query.limit || 40, 1), 60);
+    const offset = Math.max(query.offset || 0, 0);
+    const { data, count, error } = await client.from('collection_entries')
+      .select('id,entry_title,volume,sort_order,poems(*,authors(name,avatar_emoji))', { count: 'exact' })
+      .eq('work_id', query.work_id).order('sort_order').order('id').range(offset, offset + limit - 1);
+    if (error) throw error;
+    if (count) {
+      const list = (data || []).map((entry: any) => ({
+        ...entry.poems, title: entry.entry_title || entry.poems.title,
+        author_name: entry.poems.authors?.name, volume: entry.volume, sort_order: entry.sort_order,
+      }));
+      return { list, page: Math.floor(offset / limit) + 1, pageSize: limit, total: count, totalPages: Math.ceil(count / limit) };
+    }
+  }
   let qb = client
     .from('poems')
     .select('id, title, dynasty, genre, content, cover_emoji, background_hint, author_id, work_id, authors(name, avatar_emoji), works(name)');
@@ -56,11 +74,16 @@ router.get('/authors', async (req, res) => {
     const offset = Math.max(Number(req.query.offset) || 0, 0);
     const page = Math.floor(offset / limit) + 1;
 
-    // 用嵌入式聚合（authors→poems count）替代逐作者 count 查询，消除 N+1
     let qb = client
       .from('authors')
-      .select('id, name, name_traditional, dynasty, avatar_emoji, bio, poems(count)');
+      .select('*');
     let cnt = client.from('authors').select('*', { count: 'exact', head: true });
+    const capability = await cached('canonical-authors', async () => {
+      const probe = await client.from('authors').select('canonical_author_id').limit(0);
+      if (probe.error && probe.error.code !== '42703' && probe.error.code !== 'PGRST204') throw probe.error;
+      return !probe.error;
+    });
+    if (capability) { qb = qb.is('canonical_author_id', null); cnt = cnt.is('canonical_author_id', null); }
     if (q) { qb = qb.ilike('name', `%${q}%`); cnt = cnt.ilike('name', `%${q}%`); }
 
     const { count: total, error: ce } = await cnt;
@@ -71,12 +94,22 @@ router.get('/authors', async (req, res) => {
     if (ce) throw new Error(ce.message);
     if (error) throw new Error(error.message);
 
-    const list = (data || []).map((a: any) => ({
-      ...a,
-      poem_count: Array.isArray(a.poems) && a.poems[0] ? (a.poems[0].count ?? 0) : 0,
-      poems: undefined,
-    }));
-    res.json({ list, page, pageSize: limit, total: total ?? 0, totalPages: Math.ceil((total ?? 0) / limit) });
+    const withCounts = await cached('authors-counts:' + JSON.stringify((data || []).map((item: any) => item.id)), async () => {
+      const ids = (data || []).map((item: any) => item.id);
+      const aggregate = await client.rpc('guanwen_author_counts', { author_ids: ids });
+      if (aggregate.error && !missingFunction(aggregate.error)) throw aggregate.error;
+      const counts: Record<string, number> = {};
+      if (!aggregate.error) for (const item of aggregate.data || []) counts[item.author_id] = Number(item.poem_count);
+      else {
+        await Promise.all(ids.map(async (id: string) => {
+          const { count, error } = await client.from('poems').select('id', { count: 'exact', head: true }).eq('author_id', id);
+          if (error) throw error;
+          counts[id] = count ?? 0;
+        }));
+      }
+      return (data || []).map((item: any) => ({ ...item, poem_count: counts[item.id] ?? 0 }));
+    });
+    res.json({ list: withCounts, page, pageSize: limit, total: total ?? 0, totalPages: Math.ceil((total ?? 0) / limit) });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
@@ -85,7 +118,7 @@ router.get('/authors', async (req, res) => {
 // 人物详情（生平、作品集、人际关系、诗文）
 router.get('/authors/:id', async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = await authorId(client, req.params.id);
     const { data: author, error: ae } = await client
       .from('authors').select('*').eq('id', id).maybeSingle();
     if (ae) throw new Error(ae.message);
@@ -101,27 +134,15 @@ router.get('/authors/:id', async (req, res) => {
       .eq('author_id', id);
     if (re) throw new Error(re.message);
 
-    const { data: poems, error: pe } = await client
-      .from('poems').select('id, title, dynasty, genre, content, cover_emoji, background_hint, work_id, works(name)')
-      .eq('author_id', id).order('created_at', { ascending: true }).limit(500);
-    if (pe) throw new Error(pe.message);
-
-    // 语料作者无人工简介时，按朝代与存诗量生成一段兜底生平
-    let poemCount = (poems || []).length;
-    if (!author.bio || !String(author.bio).trim()) {
-      const { count, error: ce } = await client
-        .from('poems').select('*', { count: 'exact', head: true }).eq('author_id', id);
-      if (!ce && count != null && count > poemCount) poemCount = count;
-      const d = String(author.dynasty || '');
-      const src = d.includes('宋') || d.includes('词') ? '《全宋词》' : d.includes('唐') ? '《全唐诗》' : '古籍';
-      author.bio = `${d}诗人。据${src}等古籍辑录，存世篇目约 ${poemCount} 篇。本页生平尚待精编，作品如下。`;
-    }
+    const poemPage = await listPoems({ author_id: id, limit: 20 });
+    const poemCount = poemPage.total;
 
     res.json({
+      ...authorContexts[id],
       ...author,
       poemCount,
       works: works || [],
-      poems: (poems || []).map((p: any) => ({ ...p, work_name: p.works?.name })),
+      poems: poemPage.list,
       relationships: (rels || []).map((r: any) => ({
         id: r.id, relation: r.relation, note: r.note,
         related_author_id: r.related_author_id,
@@ -133,27 +154,52 @@ router.get('/authors/:id', async (req, res) => {
   }
 });
 
+router.get('/authors/:id/poems', async (req, res) => {
+  try {
+    res.json(await listPoems({
+      author_id: req.params.id,
+      limit: Number(req.query.limit) || 40,
+      offset: Number(req.query.offset) || 0,
+    }));
+  } catch (reason: any) {
+    res.status(500).json({ error: reason.message });
+  }
+});
+
 // 作品集列表
 router.get('/works', async (_req, res) => {
   try {
-    // 用嵌入式聚合（works→collection_entries count）替代逐本 count 查询
     const { data, error } = await client
       .from('works')
-      .select('*, authors(name, dynasty), collection_entries(count)');
+      .select('*, authors(name, dynasty)');
     if (error) throw new Error(error.message);
-    const withCounts = (data || []).map((w: any) => ({
-      ...w, author_name: w.authors?.name,
-      collection_entries: undefined,
-      poem_count: Array.isArray(w.collection_entries) && w.collection_entries[0]
-        ? (w.collection_entries[0].count ?? 0) : 0,
-    }));
+    const withCounts = await cached('works-with-counts', async () => {
+      const ids = (data || []).map((work: any) => work.id);
+      const aggregate = await client.rpc('guanwen_work_counts', { work_ids: ids });
+      if (aggregate.error && !missingFunction(aggregate.error)) throw aggregate.error;
+      const counts: Record<string, number> = {};
+      if (!aggregate.error) for (const row of aggregate.data || []) counts[row.work_id] = Number(row.poem_count);
+      else await Promise.all(ids.map(async (id: string) => {
+        const entries = await client.from('collection_entries').select('id',{ count: 'exact',head: true }).eq('work_id',id);
+        if (entries.error) throw entries.error;
+        if (entries.count) counts[id] = entries.count;
+        else {
+          const poems = await client.from('poems').select('id',{ count:'exact',head:true }).eq('work_id',id);
+          if (poems.error) throw poems.error;
+          counts[id] = poems.count ?? 0;
+        }
+      }));
+      return (data || []).map((work: any) => ({ ...work,author_name:work.authors?.name,poem_count:counts[work.id] ?? 0 }));
+    });
     res.json(withCounts);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// 作品卷次/作者目录聚合（目录 tab 的分层展示，尤其适用于全唐诗等巨型文集）
+// ============ 诗文 ============
+
+// 诗文列表（可筛选人物 / 作品）
 const catalogCache = new Map<string, { at: number; vols: { volume: string; count: number }[] }>();
 router.get('/works/:id/catalog', async (req, res) => {
   try {
@@ -197,15 +243,15 @@ router.get('/works/:id/catalog', async (req, res) => {
 router.get('/works/:id/entries', async (req, res) => {
   try {
     const { id } = req.params;
-    const limit = req.query.limit ? Math.min(Number(req.query.limit), 500) : 200;
-    const offset = req.query.offset ? Number(req.query.offset) : 0;
+    const limit = Math.min(500, Math.max(1, Math.floor(Number(req.query.limit) || 200)));
+    const offset = Math.max(0,Math.floor(Number(req.query.offset) || 0));
     const volume = req.query.volume as string | undefined;
     let qb = client
       .from('collection_entries')
       .select('id, volume, sort_order, entry_title, poem_id, poems(id, title, dynasty, genre, cover_emoji, background_hint, author_id)', { count: 'exact' })
       .eq('work_id', id)
-      .order('sort_order', { ascending: true });
-    if (volume) qb = qb.eq('volume', volume);
+      .order('sort_order', { ascending: true }).order('id');
+    if (volume) qb = volume === '未分卷' ? qb.or('volume.is.null,volume.eq.') : qb.eq('volume', volume);
     const { data, count, error } = await qb.range(offset, offset + limit - 1);
     if (error) throw new Error(error.message);
     res.json({ entries: data || [], total: count ?? 0 });
@@ -325,7 +371,7 @@ router.get('/poems/:id', async (req, res) => {
       .eq('id', id).maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return res.status(404).json({ error: '未找到该诗文' });
-    res.json({ ...data, author_name: data.authors?.name, work_name: data.works?.name });
+    res.json({ ...workContexts[id], ...data, author_name: data.authors?.name, work_name: data.works?.name });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
@@ -336,28 +382,47 @@ router.get('/search', async (req, res) => {
   try {
     const q = (typeof req.query.q === 'string' ? req.query.q : '').trim().slice(0, 128);
     if (!q) return res.json({ authors: [], works: [], poems: [] });
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+    const limit = Math.min(60, Math.max(1, Number(req.query.limit) || 20));
+    // Trigram indexes cannot narrow a contains query with fewer than three letters.
+    // Short queries search author/collection/title; longer phrases also search the body.
+    const bodySearch = (q.match(/[\p{L}\p{N}]/gu)?.length ?? 0) >= 3;
+    if (!/[\p{L}\p{N}]/u.test(q)) return res.json({ authors: [], works: [], poems: [], has_more: false, offset, limit });
+    if (bodySearch) {
+      const indexed = await client.rpc('guanwen_search', { keyword: q, page_offset: offset, page_limit: limit });
+      if (!indexed.error) return res.json(indexed.data);
+      if (!missingFunction(indexed.error)) throw indexed.error;
+    }
     const kw = `%${q.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
     const selectPoems = () => client
       .from('poems')
       .select('id, title, dynasty, genre, cover_emoji, background_hint, author_id, authors(name, avatar_emoji)');
 
     const [authorsR, worksR, titlesR] = await Promise.all([
-      client.from('authors').select('id, name, dynasty, avatar_emoji').ilike('name', kw).limit(10),
-      client.from('works').select('id, name, era, cover_emoji, author_id').ilike('name', kw).limit(10),
-      selectPoems().ilike('title', kw).limit(20),
+      client.from('authors').select('*').ilike('name', kw).order('name').order('id').limit(10),
+      client.from('works').select('id, name, era, cover_emoji, author_id').ilike('name', kw).order('name').order('id').limit(10),
+      selectPoems().ilike('title', kw).order('title').order('id').range(offset, offset + limit),
     ]);
     if (authorsR.error) throw new Error(authorsR.error.message);
     if (worksR.error) throw new Error(worksR.error.message);
     if (titlesR.error) throw new Error(titlesR.error.message);
     const poems = titlesR.data || [];
-    if (Array.from(q).length >= 2 && poems.length < 20) {
-      const linesR = await selectPoems().ilike('content', kw).not('title', 'ilike', kw).limit(20 - poems.length);
-      if (!linesR.error) poems.push(...(linesR.data || []));
+    if (bodySearch && poems.length <= limit) {
+      const titleCount = await client.from('poems').select('id', { count: 'exact', head: true }).ilike('title', kw);
+      if (titleCount.error) throw titleCount.error;
+      const count = titleCount.count ?? 0;
+      const bodyOffset = Math.max(0, offset - count);
+      const linesR = await selectPoems().ilike('content', kw).not('title', 'ilike', kw)
+        .order('title').order('id').range(bodyOffset, bodyOffset + limit - poems.length);
+      if (linesR.error) throw linesR.error;
+      poems.push(...(linesR.data || []));
     }
+    const hasMore = poems.length > limit;
     res.json({
-      authors: authorsR.data || [],
-      works: worksR.data || [],
-      poems: poems.map((p: any) => ({
+      has_more: hasMore, offset, limit,
+      authors: offset ? [] : (authorsR.data || []).filter((author: any) => !author.canonical_author_id).map((author: any) => ({ id: author.id, name: author.name, dynasty: author.dynasty, avatar_emoji: author.avatar_emoji })),
+      works: offset ? [] : worksR.data || [],
+      poems: poems.slice(0, limit).map((p: any) => ({
         ...p, author_name: p.authors?.name, author_emoji: p.authors?.avatar_emoji,
       })),
     });

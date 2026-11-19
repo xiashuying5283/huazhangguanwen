@@ -1,4 +1,4 @@
-import { pgTable, serial, timestamp, varchar, text, jsonb, integer, index } from "drizzle-orm/pg-core"
+import { pgTable, bigint, serial, timestamp, varchar, text, jsonb, integer, index } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 
@@ -16,6 +16,10 @@ export const authors = pgTable("authors", {
 	avatar_emoji: varchar("avatar_emoji", { length: 16 }),
 	avatar_url: text("avatar_url"),
 	bio: text("bio"),
+	canonical_author_id: varchar("canonical_author_id", { length: 36 }),
+	evaluation: text("evaluation"),
+	timeline: jsonb("timeline"),
+	editorial_sources: jsonb("editorial_sources"),
 	created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
 	index("authors_dynasty_idx").on(table.dynasty),
@@ -49,6 +53,10 @@ export const poems = pgTable("poems", {
 	// 拼音：jsonb 数组，第 i 项对应第 i 行，每项为 [{ c: 字, p: 拼音 }]
 	pinyin: jsonb("pinyin"),
 	annotation: text("annotation"),
+	annotation_notes: jsonb("annotation_notes"),
+	creation_background: text("creation_background"),
+	background_source: jsonb("background_source"),
+	analysis_provenance: jsonb("analysis_provenance").default(sql`'{}'::jsonb`),
 	translation: text("translation"),
 	appreciation: text("appreciation"),
 	cover_emoji: varchar("cover_emoji", { length: 16 }),
@@ -86,3 +94,13 @@ export const reading_logs = pgTable("reading_logs", {
 	index("reading_logs_device_id_idx").on(table.device_id),
 	index("reading_logs_author_id_idx").on(table.author_id),
 ]);
+// 同一作品可收入不同文集，卷次和篇序归属于具体收录条目。
+export const collectionEntries = pgTable("collection_entries", {
+  id: bigint("id", { mode: 'number' }).primaryKey(),
+  work_id: text("work_id").notNull().references(() => works.id),
+  poem_id: text("poem_id").notNull().references(() => poems.id),
+  volume: text("volume"),
+  sort_order: integer("sort_order").notNull(),
+  entry_title: text("entry_title"),
+  created_at: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});

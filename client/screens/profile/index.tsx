@@ -10,7 +10,6 @@ import { useResource } from '@/hooks/useResource';
 import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { Api, hasBackend } from '@/utils/api';
 import { getDeviceId } from '@/utils/device';
-import { routeForTitle } from '@/utils/drama';
 import { shareText } from '@/utils/share';
 import { theme } from '@/theme';
 
@@ -99,12 +98,12 @@ export default function ProfileScreen() {
         </>}
         {panel === '读诗笔记' && <>
           {notes.length === 0 && <Message>在精读页的阅读菜单中写下第一篇笔记</Message>}
-          {notes.map(({ poem, text }) => <DialogRow key={poem.id} onPress={() => { selectPanel(); const r = routeForTitle(poem.title, poem.id); router.push(r.path, { id: r.id }); }}>{poem.title}{'\n'}{text.slice(0, 120)}</DialogRow>)}
+          {notes.map(({ poem, text }) => <DialogRow key={poem.id} onPress={() => { selectPanel(); router.push('/read', { id: poem.id }); }}>{poem.title}{'\n'}{text.slice(0, 120)}</DialogRow>)}
         </>}
         {panel === '最近读过' && <>
           {recent.length === 0 && <Message>{remote.loading ? '正在载入阅读记录…' : '还没有阅读记录'}</Message>}
           {remote.error && <Message retry={remote.retry}>{remote.error}</Message>}
-          {recent.map((poem) => <DialogRow key={poem.id} onPress={() => { selectPanel(); const r = routeForTitle(poem.title, poem.id); router.push(r.path, { id: r.id }); }}>{poem.title} · {poem.author_name ?? '佚名'}</DialogRow>)}
+          {recent.map((poem) => <DialogRow key={poem.id} onPress={() => { selectPanel(); router.push('/read', { id: poem.id }); }}>{poem.title} · {poem.author_name ?? '佚名'}</DialogRow>)}
         </>}
       </PaperDialog>}
     </Paper>

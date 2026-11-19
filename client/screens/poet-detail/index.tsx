@@ -1,26 +1,25 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { BookCover, IconButton, Ink, Message, PageHeader, Paper, Segments, paperStyles as p } from '@/components/Paper';
+import { PaginationBar } from '@/components/PaginationBar';
 import { PoetPortrait } from '@/components/PoetPortrait';
 import { PoemCard } from '@/components/PoemCard';
 import { toggleFavorite, useReadingShelf } from '@/contexts/ReadingShelf';
 import { useResource } from '@/hooks/useResource';
 import { useSafeRouter, useSafeSearchParams } from '@/hooks/useSafeRouter';
 import { loadPoet } from '@/data/people';
-import { Api, hasBackend } from '@/utils/api';
+import { Api, hasBackend, type Paged, type PoemSummary } from '@/utils/api';
 import { theme } from '@/theme';
 
 const tabs = ['生平年表', '代表作品', '评价'] as const;
 type Tab = (typeof tabs)[number];
 
-const liBaiTimeline = [
-  ['701', '李白出生。'],
-  ['742', '应召来到长安，供奉翰林。'],
-  ['744', '离开长安，重启漫游。'],
-  ['762', '卒于当涂。'],
-] as const;
-
 export default function PoetDetailScreen() {
+  const { id } = useSafeSearchParams<{ id?: string }>();
+  return <PoetDetail key={id} />;
+}
+
+function PoetDetail() {
   const router = useSafeRouter();
   const { id, tab: start } = useSafeSearchParams<{ id?: string; tab?: Tab }>();
   const [tab, setTab] = useState<Tab>(tabs.find((item) => item === start) ?? '生平年表');
@@ -30,18 +29,26 @@ export default function PoetDetailScreen() {
   const shelf = useReadingShelf();
   const saved = shelf.data.favorites.some((item) => item.kind === '人物' && item.item.id === id);
   const [generated, setGenerated] = useState<{ id: string; text: string }>();
-  const [limit, setLimit] = useState(20);
+  const [page, setPage] = useState(1);
+  const [generatingBio, setGeneratingBio] = useState(false);
+  const [bioError, setBioError] = useState('');
+  const loadPoems = useCallback(() => id && tab === '代表作品'
+    ? Api.get<Paged<PoemSummary>>(`/api/v1/authors/${encodeURIComponent(id)}/poems?limit=40&offset=${(page - 1) * 40}`)
+    : Promise.resolve(undefined), [id, tab, page]);
+  const poems = useResource(loadPoems);
   const bio = generated?.id === poet?.id ? generated?.text : poet?.bio;
-  const needsBio = hasBackend && poet && !poet.bio?.trim();
+  const timeline = poet?.timeline ?? [];
+  const needsBio = hasBackend && poet && !bio?.trim();
 
-  useEffect(() => {
-    if (!needsBio || !id) return;
-    let active = true;
-    Api.post<{ bio?: string }>('/api/v1/ai/bio', { author_id: id }).then((data) => {
-      if (active && data.bio) setGenerated({ id, text: data.bio });
-    }).catch(() => undefined);
-    return () => { active = false; };
-  }, [id, needsBio]);
+  const generateBio = async () => {
+    if (!needsBio || !id || generatingBio) return;
+    setGeneratingBio(true); setBioError('');
+    try {
+      const data = await Api.post<{ bio?: string }>('/api/v1/ai/bio', { author_id: id });
+      if (data.bio) setGenerated({ id: poet.id, text: data.bio });
+    } catch (reason) { setBioError(reason instanceof Error ? reason.message : '生成失败，请重试'); }
+    finally { setGeneratingBio(false); }
+  };
 
   return (
     <Paper scene="people">
@@ -58,22 +65,27 @@ export default function PoetDetailScreen() {
           {tab === '生平年表' && <View style={[p.card, styles.panel]}>
             <Ink style={p.section}>{poet.name} · {poet.dynasty}</Ink>
             <Ink style={p.body}>{bio || '暂未收录生平资料'}</Ink>
-            {poet.name === '李白' && <>
+            {needsBio && <Pressable accessibilityRole="button" disabled={generatingBio} onPress={generateBio}><Ink>{generatingBio ? '生成中…' : '生成生平介绍'}</Ink></Pressable>}
+            {!!bioError && <Message>{bioError}</Message>}
+            {timeline.length > 0 && (
               <View style={styles.timeline}>
-                {liBaiTimeline.map(([year, event]) => (
+                {timeline.map(({ year, event }) => (
                   <View key={year} style={[p.row, p.divider, styles.yearRow]}>
                     <Ink style={styles.year}>{year}</Ink><Ink style={p.flex}>{event}</Ink>
                   </View>
                 ))}
               </View>
-              <Pressable accessibilityRole="link" style={styles.source} onPress={() => { void Linking.openURL('https://www.edb.gov.hk/attachment/tc/curriculum-development/kla/chi-edu/resources/secondary-edu/lang/20240708_PDF3.pdf').catch(() => undefined); }}>
-                <Ink style={p.meta}>年表资料 · 香港教育局</Ink>
+            )}
+            {poet.editorial_sources?.map(({ title, url }) => (
+              <Pressable key={url} accessibilityRole="link" style={styles.source} onPress={() => { void Linking.openURL(url).catch(() => undefined); }}>
+                <Ink style={p.meta}>{title}</Ink>
               </Pressable>
-            </>}
+            ))}
+
           </View>}
           {tab === '评价' && <View style={[p.card, styles.panel]}>
             <Ink style={p.section}>诗文风格</Ink>
-            <Ink style={p.body}>{poet.name === '李白' ? '李白诗歌想象瑰丽，语言自然明快。山水、饮酒与明月反复入诗，既写豪情，也写客居与离别。' : (bio || '暂未收录评价')}</Ink>
+            <Ink style={p.body}>{poet.evaluation || '暂未收录评价'}</Ink>
           </View>}
           {tab === '代表作品' && <View style={styles.works}>
             {poet.works.map((work) => (
@@ -81,9 +93,12 @@ export default function PoetDetailScreen() {
                 <BookCover name={work.name} width={52} height={72} /><Ink style={p.itemTitle}>{work.name}</Ink>
               </Pressable>
             ))}
-            {poet.poems.slice(0, limit).map((poem) => <PoemCard key={poem.id} poem={{ ...poem, author_name: poet.name }} />)}
-            {poet.poems.length > limit && <Pressable accessibilityRole="button" style={styles.relations} onPress={() => setLimit(limit + 20)}><Ink>加载更多诗文</Ink></Pressable>}
-            {!poet.works.length && !poet.poems.length && <Message>暂未收录作品</Message>}
+            {poems.loading && <ActivityIndicator color={theme.primary} />}
+            {poems.error && <Message retry={poems.retry}>{poems.error}</Message>}
+            {poems.data?.list.map((poem) => <PoemCard key={poem.id} poem={{ ...poem, author_name: poet.name }} />)}
+            {poems.data && poems.data.totalPages > 1 && <PaginationBar {...poems.data}
+              onPrev={() => setPage((value) => value - 1)} onNext={() => setPage((value) => value + 1)} />}
+            {poems.data?.total === 0 && !poet.works.length && <Message>暂未收录作品</Message>}
           </View>}
         </>}
       </ScrollView>

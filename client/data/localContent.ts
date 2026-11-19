@@ -43,6 +43,8 @@ export function getLocalContent(path: string): unknown {
   if (route === '/api/v1/recommend/list') return recommended.slice(0, Number(params.get('limit')) || 5);
   if (route === '/api/v1/works') return works;
   if (route === '/api/v1/authors') return paginate(authors.filter((author) => matches(author.name)), params);
+  const authorPoems = /^\/api\/v1\/authors\/([^/]+)\/poems$/u.exec(route);
+  if (authorPoems) return paginate(poems.filter((poem) => poem.author_id === decodeURIComponent(authorPoems[1])), params);
   if (route.startsWith('/api/v1/authors/')) return getAuthor(decodeURIComponent(route.slice('/api/v1/authors/'.length)));
   if (route === '/api/v1/poems') {
     const work = params.get('work_id');
@@ -54,11 +56,21 @@ export function getLocalContent(path: string): unknown {
     if (!poem) throw new Error('未找到该篇诗文');
     return poem;
   }
-  if (route === '/api/v1/search') return {
-    authors: authors.filter((author) => matches(author.name)),
-    works: works.filter((work) => matches(work.name)),
-    poems: poems.filter((poem) => matches(poem.title) || matches(poem.content)),
-  };
+  if (route === '/api/v1/search') {
+    const page = paginate(poems.filter((poem) => matches(poem.title) || matches(poem.content)), params);
+    const offset = Math.max(0,Number(params.get('offset')) || 0);
+    return { authors: offset ? [] : authors.filter((author) => matches(author.name)),
+      works: offset ? [] : works.filter((work) => matches(work.name)), poems: page.list,
+      has_more: page.page < page.totalPages };
+  }
+  const directory = /^\/api\/v1\/works\/([^/]+)\/(entries|catalog)$/u.exec(route);
+  if (directory) {
+    const readings = poems.filter((poem) => poem.work_id === decodeURIComponent(directory[1]));
+    if (directory[2] === 'catalog') return { catalog: readings.length ? [{ volume: '未分卷', count: readings.length }] : [] };
+    const page = paginate(readings,params);
+    return { total: page.total, entries: page.list.map((poem,index) => ({ id: poem.id,poem_id: poem.id,
+      sort_order: index,entry_title: poem.title,volume: null,poems: poem })) };
+  }
   if (route === '/api/v1/history') return { ...paginate([], params), read_count: 0, author_count: 0 };
   throw new Error('内置选篇没有该内容');
 }
